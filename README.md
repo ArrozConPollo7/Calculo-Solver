@@ -29,7 +29,7 @@ Este repositorio contiene un sistema de actualización automática para el solve
 Para ejecutar el solver, usa este oneliner en la consola de D2L:
 
 ```javascript
-fetch('https://TU-WORKER.tu-usuario.workers.dev')
+fetch('https://calculo-solver.juandavidgr39.workers.dev')
   .then(r=>r.text()).then(eval)
 ```
 
