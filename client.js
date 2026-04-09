@@ -251,9 +251,37 @@
             const raw = data.choices[0].message.content;
             const res = limpiarRespuestaModelo(raw);
             
-            // Extracción robusta de letra
-            const letraMatch = res.letraSeccion.toUpperCase().match(new RegExp("[A-E]"));
-            const letra = letraMatch ? letraMatch[0] : (raw.match(new RegExp("---[\\s\\S]*?([A-E])", "im"))?.[1] || "A");
+            // Extracción robusta de letra — cascada de 5 métodos
+            let letra = null;
+            // 1. Separador --- seguido de letra sola en la última línea
+            const rawLines = raw.split(new RegExp("[\r\n]+"));
+            const sepIdx = rawLines.map(l => l.trim()).lastIndexOf("---");
+            if (sepIdx !== -1 && sepIdx < rawLines.length - 1) {
+                const afterSep = rawLines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
+                if (afterSep.length > 0 && new RegExp("^[A-E]$").test(afterSep[0])) {
+                    letra = afterSep[0].toUpperCase();
+                }
+            }
+            // 2. letraSeccion aislada
+            if (!letra) {
+                const m = res.letraSeccion.toUpperCase().match(new RegExp("^[\s]*([A-E])[\s]*$"));
+                if (m) letra = m[1];
+            }
+            // 3. Frases explícitas en últimas 300 chars
+            if (!letra) {
+                const tail = raw.slice(-300);
+                const m = tail.match(new RegExp("(?:respuesta|opci[oó]n|letra)[^A-Za-z]*([A-E])(?:[^A-Za-z]|$)", "i"));
+                if (m) letra = m[1].toUpperCase();
+            }
+            // 4. Última línea que sea exactamente una letra
+            if (!letra) {
+                for (let li = rawLines.length - 1; li >= 0; li--) {
+                    const l = rawLines[li].trim();
+                    if (new RegExp("^[A-E]$").test(l)) { letra = l; break; }
+                }
+            }
+            // 5. Fallback: A
+            if (!letra) letra = "A";
 
             return { letra, justificacion: res.justificacion };
         }
