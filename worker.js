@@ -1,68 +1,64 @@
 /**
  * CLOUDFLARE WORKER - D2L GROQ SOLVER PROXY
- * 
- * Este worker actúa como un puente (proxy) para servir el script cliente 
- * alojado en GitHub, inyectando la API Key de Groq de forma dinámica.
+ * Usa GitHub API (no raw.githubusercontent) para soportar repos privados
  */
+
+const CORS_HEADERS = {
+  "Content-Type": "application/javascript; charset=utf-8",
+  "Access-Control-Allow-Origin": "*",
+  "Cache-Control": "no-cache"
+};
+
+const OWNER  = "ArrozConPollo7";
+const REPO   = "Calculo-Solver";
+const BRANCH = "main";
 
 export default {
   async fetch(request, env) {
-    // Configuración desde Variables de Entorno (Secrets) de Cloudflare
-    const GITHUB_TOKEN = env.GITHUB_TOKEN; // Secret: Token de GitHub
-    const GROQ_KEY = env.GROQ_KEY;         // Secret: Tu API Key de Groq
-    
-    // URL del archivo client.js en tu repositorio (Ajustar OWNER y REPO)
-    // El usuario es juandavidgr39
-    const OWNER = "ArrozConPollo7";
-    const REPO  = "Calculo-Solver"; // Ajustar si el nombre del repo es diferente
-    const PATH  = "client.js";
-    const BRANCH = "main";
 
-    const GITHUB_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${PATH}`;
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    const GROQ_KEY    = env.GROQ_KEY    || "";
+    const GITHUB_TOKEN = env.GITHUB_TOKEN || "";
+
+    // Elegir archivo según ruta
+    const path = new URL(request.url).pathname;
+    const FILE = path === "/fisica" ? "fisica.js" : "client.js";
+
+    // GitHub Contents API — funciona con repos privados + token
+    const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}`;
 
     try {
-      // 1. Obtener el script del cliente desde GitHub
-      const response = await fetch(GITHUB_URL, {
+      const res = await fetch(apiUrl, {
         headers: {
-          "Authorization": GITHUB_TOKEN ? `token ${GITHUB_TOKEN}` : "",
-          "User-Agent": "Cloudflare-Worker-Proxy",
-          "Accept": "application/vnd.github.v3.raw"
+          "Authorization": `Bearer ${GITHUB_TOKEN}`,
+          "Accept": "application/vnd.github.v3.raw",  // devuelve el raw directamente
+          "User-Agent": "Cloudflare-Worker",
+          "X-GitHub-Api-Version": "2022-11-28"
         }
       });
 
-      if (!response.ok) {
+      if (!res.ok) {
+        const msg = `GitHub API ${res.status}: ${res.statusText}. ` +
+          `Verifica que el repo '${OWNER}/${REPO}' exista, que el archivo '${FILE}' esté en la rama '${BRANCH}', ` +
+          `y que el GITHUB_TOKEN tenga permisos de lectura.`;
         return new Response(
-          `console.error("Solver: GitHub devolvió ${response.status} — verifica que el repo sea público o que GITHUB_TOKEN esté configurado.");`,
-          { status: 200, headers: {
-            "Content-Type": "application/javascript; charset=utf-8",
-            "Access-Control-Allow-Origin": "*"
-          }}
+          `console.error("[Solver] ${msg}");`,
+          { status: 200, headers: CORS_HEADERS }
         );
       }
 
-      let script = await response.text();
+      let script = await res.text();
+      script = script.replace("PLACEHOLDER_KEY", GROQ_KEY);
 
-      // 2. Inyectar la API Key de Groq
-      // Reemplaza el placeholder definido en client.js
-      script = script.replace("PLACEHOLDER_KEY", GROQ_KEY || "");
+      return new Response(script, { status: 200, headers: CORS_HEADERS });
 
-      // 3. Devolver los headers correctos para que el browser lo admita como script
-      return new Response(script, {
-        headers: {
-          "Content-Type": "application/javascript; charset=utf-8",
-          "Access-Control-Allow-Origin": "*",
-          "X-Content-Type-Options": "nosniff",
-          "Cache-Control": "no-cache" // Evitar cache para ver cambios rápidos de GitHub
-        }
-      });
-
-    } catch (error) {
+    } catch (err) {
       return new Response(
-        `console.error("Solver Worker Error: ${error.message}");`,
-        { status: 200, headers: {
-          "Content-Type": "application/javascript; charset=utf-8",
-          "Access-Control-Allow-Origin": "*"
-        }}
+        `console.error("[Solver] Worker error: ${err.message}");`,
+        { status: 200, headers: CORS_HEADERS }
       );
     }
   }
