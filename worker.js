@@ -31,7 +31,13 @@ export default {
       });
 
       if (!response.ok) {
-        return new Response(`Error al obtener script de GitHub: ${response.status} ${response.statusText}`, { status: 500 });
+        return new Response(
+          `console.error("Solver: GitHub devolvió ${response.status} — verifica que el repo sea público o que GITHUB_TOKEN esté configurado.");`,
+          { status: 200, headers: {
+            "Content-Type": "application/javascript; charset=utf-8",
+            "Access-Control-Allow-Origin": "*"
+          }}
+        );
       }
 
       let script = await response.text();
@@ -51,7 +57,13 @@ export default {
       });
 
     } catch (error) {
-      return new Response(`Worker Error: ${error.message}`, { status: 500 });
+      return new Response(
+        `console.error("Solver Worker Error: ${error.message}");`,
+        { status: 200, headers: {
+          "Content-Type": "application/javascript; charset=utf-8",
+          "Access-Control-Allow-Origin": "*"
+        }}
+      );
     }
   }
 };
