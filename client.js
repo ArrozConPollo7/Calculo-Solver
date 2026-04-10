@@ -193,7 +193,7 @@
             preguntarAI(enunciado, opts, imgData).then(({ procedimiento, letra, modelo }) => {
                 const qd = q.ownerDocument;
                 qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
-                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\(.*?\\)|\\[.*?\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
+                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\\(.*?\\\)|\\\[.*?\\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
                 qd.getElementById(`letra-${id}`).innerText = letra;
 
                 const radios = q.querySelectorAll('input[type="radio"]');
