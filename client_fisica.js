@@ -10,19 +10,19 @@
     const GROQ_KEYS = ["DEPLOY_REPLACE_ME"];
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-    
+
     // ESTRATEGIA DE MODELOS
-    const MODEL_ESTANDAR = "qwen-3-32b";
-    const MODEL_PRO = "gpt-oss-120b";
-    const MODEL_VISION = "llama-4-scout-preview";
+    const MODEL_ESTANDAR = "qwen/qwen3-32b";
+    const MODEL_PRO = "openai/gpt-oss-120b";
+    const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
 
     // TEMAS PRO PARA FÍSICA Y DETONADORES DEL 30%
     const KEYWORDS_PRO_FISICA = [
         "justificación requerida por escrito", "(30%)", "30 puntos",
-        "coeficiente de fricción cinético", "fuerza de contacto", 
-        "trabajo y energía", "superficie horizontal", "cuerda inextensible", 
-        "polea ideal", "equilibrio", "tensión en la cuerda", 
-        "coeficiente de fricción estático", "parte del reposo", 
+        "coeficiente de fricción cinético", "fuerza de contacto",
+        "trabajo y energía", "superficie horizontal", "cuerda inextensible",
+        "polea ideal", "equilibrio", "tensión en la cuerda",
+        "coeficiente de fricción estático", "parte del reposo",
         "fuerza de fricción promedio", "masa en suspensión", "fuerza mínima"
     ];
 
@@ -56,7 +56,7 @@ FORMATO OBLIGATORIO:
     async function preguntarAI(enunciado, opciones, imagen) {
         const enunciadoMinus = (enunciado || "").toLowerCase();
         let modeloAElegir = MODEL_ESTANDAR;
-        
+
         // 1. Detección PRO
         if (KEYWORDS_PRO_FISICA.some(k => enunciadoMinus.includes(k))) {
             modeloAElegir = MODEL_PRO;
@@ -64,7 +64,7 @@ FORMATO OBLIGATORIO:
         if (imagen) modeloAElegir = MODEL_VISION;
 
         const optsStr = opciones.map(o => o.letra + ") " + o.texto).join(nl);
-        
+
         const generarPayload = (modeloParam) => {
             const p = {
                 model: modeloParam,
@@ -91,10 +91,10 @@ FORMATO OBLIGATORIO:
                         method: "POST", headers: { "Authorization": "Bearer " + currentKey, "Content-Type": "application/json" },
                         body: JSON.stringify(generarPayload(modeloParam))
                     });
-                    if (r.status === 429) { 
-                        currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length; 
+                    if (r.status === 429) {
+                        currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
                         await new Promise(res => setTimeout(res, 1500));
-                        continue; 
+                        continue;
                     }
                     if (!r.ok) throw new Error("API Error " + r.status);
                     const data = await r.json();
@@ -172,7 +172,7 @@ FORMATO OBLIGATORIO:
             })).filter(o => o.texto.length > 0);
 
             crearUI(q, id);
-            
+
             preguntarAI(enunciado, opts, imgData).then(({ procedimiento, letra, modelo }) => {
                 document.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
                 document.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\\(.*?\\\)|\\\[.*?\\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
@@ -196,6 +196,6 @@ FORMATO OBLIGATORIO:
             }
         });
     });
-    
+
     document.querySelectorAll(".d2l-quiz-question-container, fieldset.dfs_m, .d2l-quiz-question-autosave-container").forEach(q => observer.observe(q));
 })();
