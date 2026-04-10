@@ -16,10 +16,37 @@
     const MODEL_PRO = "gpt-oss-120b";
     const MODEL_VISION = "llama-4-scout-preview";
 
-    // TEMAS PRO PARA FÍSICA
-    const KEYWORDS_PRO_FISICA = ["circular", "centrípeta", "fuerza central", "energía", "conservación", "momento", "lineal", "colisión", "choque", "elástico"];
+    // TEMAS PRO PARA FÍSICA Y DETONADORES DEL 30%
+    const KEYWORDS_PRO_FISICA = [
+        "justificación requerida por escrito", "(30%)", "30 puntos",
+        "coeficiente de fricción cinético", "fuerza de contacto", 
+        "trabajo y energía", "superficie horizontal", "cuerda inextensible", 
+        "polea ideal", "equilibrio", "tensión en la cuerda", 
+        "coeficiente de fricción estático", "parte del reposo", 
+        "fuerza de fricción promedio", "masa en suspensión", "fuerza mínima"
+    ];
 
-    const SYSTEM_FISICA = "Eres un físico experto en Mecánica (Serway). Define sistema de referencia. Resuelve algebraicamente paso a paso. Selecciona la opción que matemáticamente corresponda al resultado final.";
+    const SYSTEM_FISICA = `Eres un profesor universitario experto en FÍSICA MECÁNICA (NC1001 EAFIT — Serway & Jewett 10ª ed.) con 20 años de experiencia.
+Tu única tarea: resolver la pregunta y justificarla con rigor físico y matemático absoluto.
+
+TRAMPAS FRECUENTES EN ESTE EXAMEN:
+- Si dan una "fuerza de fricción promedio", recuerda disipar energía por fricción (W_fk = fk * d).
+- Fuerza en ángulo sobre superficie: OJO, modifica la Normal. N = M*g - F*sin(theta) o M*g + F*sin(theta).
+- Poleas ideales: misma T, misma aceleración, pero direcciones opuestas para cuerpos conectados.
+- Trabajo de la normal sobre el plano: siempre es 0 (perpendicular).
+- Colisión inelástica: momento se conserva, energía cinética NO se conserva.
+
+PROTOCOLO OBLIGATORIO DE RESPUESTA:
+1. DATOS: Extrae todos los datos explícitos e implícitos. g = 9.8 m/s^2.
+2. DCL: Escribe un breve Diagrama de Cuerpo Libre textual por masa.
+3. ECUACIONES: Escribe las fórmulas de Newton ΣF=ma o Trabajo/Energía E_i + W = E_f. Despeja TODO algebraicamente primero.
+4. RESOLUCIÓN: Sustituye valores numéricos y da el resultado final.
+5. OPCIONES: Verifica cuál opción es estrictamente igual.
+
+FORMATO OBLIGATORIO:
+- Todo en español. Cero inglés.
+- Al terminar tu explicación y resolución, escribe OBLIGATORIAMENTE un separador de tres guiones ('---') en una línea nueva.
+- En la línea inferior al separador escribe ÚNICAMENTE la letra de la opción correcta (ej: A, B, C, D o E) sin paréntesis ni puntos.`;
 
     function formulaAImagen(latex) {
         const clean = latex.replace(/\\\(/g, "").replace(/\\\)/g, "").replace(/\\\[/g, "").replace(/\\\]/g, "").replace(/\$/g, "").trim();
