@@ -1,4 +1,7 @@
 (function () {
+
+    if (window.__solverActivo) { console.warn("[Solver] Ya está corriendo, ignorando."); return; }
+    window.__solverActivo = true;
     // 4. PUNTO VERDE MUY PEQUEÑO PARA CONFIRMAR INICIO (Opacidad 15%)
     const initDot = document.createElement("div");
     initDot.style = "position:fixed; top:2px; left:2px; width:4px; height:4px; border-radius:50%; background:#00ff00; opacity:0.15; z-index:99999; pointer-events:none;";
@@ -226,7 +229,7 @@
     }
 
     const quizDoc = getQuizDoc();
-    const preguntas = quizDoc.querySelectorAll(".d2l-quiz-question-container, fieldset.dfs_m, .d2l-quiz-question-autosave-container");
+    const preguntas = quizDoc.querySelectorAll("fieldset.dfs_m");
     console.log("[Solver] Preguntas encontradas:", preguntas.length);
     preguntas.forEach(q => observer.observe(q));
 })();
