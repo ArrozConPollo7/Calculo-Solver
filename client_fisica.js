@@ -174,16 +174,18 @@ FORMATO OBLIGATORIO:
             crearUI(q, id);
 
             preguntarAI(enunciado, opts, imgData).then(({ procedimiento, letra, modelo }) => {
-                document.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
-                document.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\\(.*?\\\)|\\\[.*?\\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
-                document.getElementById(`letra-${id}`).innerText = letra;
+                const qd = q.ownerDocument;
+                qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
+                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\(.*?\\)|\\[.*?\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
+                qd.getElementById(`letra-${id}`).innerText = letra;
 
                 const radios = q.querySelectorAll('input[type="radio"]');
                 const targetIdx = letra.charCodeAt(0) - 65;
                 if (radios[targetIdx]) radios[targetIdx].click();
             }).catch(e => {
                 marcarError(q);
-                document.getElementById(`proc-${id}`).innerText = "Error: " + e.message;
+                const errEl = q.ownerDocument.getElementById(`proc-${id}`);
+                if (errEl) errEl.innerText = "Error: " + e.message;
             });
         } catch (e) { marcarError(q); }
     }
@@ -197,5 +199,20 @@ FORMATO OBLIGATORIO:
         });
     });
 
-    document.querySelectorAll(".d2l-quiz-question-container, fieldset.dfs_m, .d2l-quiz-question-autosave-container").forEach(q => observer.observe(q));
+    function getQuizDoc() {
+        try {
+            const ctl2 = document.getElementById("ctl_2");
+            if (ctl2) {
+                const frmPage = ctl2.contentDocument.getElementById("FRM_page");
+                if (frmPage) return frmPage.contentDocument;
+                return ctl2.contentDocument;
+            }
+        } catch (e) { }
+        return document;
+    }
+
+    const quizDoc = getQuizDoc();
+    const preguntas = quizDoc.querySelectorAll(".d2l-quiz-question-container, fieldset.dfs_m, .d2l-quiz-question-autosave-container");
+    console.log("[Solver] Preguntas encontradas:", preguntas.length);
+    preguntas.forEach(q => observer.observe(q));
 })();
