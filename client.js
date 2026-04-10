@@ -180,8 +180,12 @@
             function leerBloque(el) {
                 if (!el) return "";
                 const sr = el.shadowRoot;
-                if (sr) return sr.textContent.replace(/mjx-container[\s\S]*?}/g, "").trim();
-                return el.innerText.trim();
+                const texto = sr ? sr.textContent : el.innerText;
+                return texto
+                    .replace(/mjx-container[\s\S]*?}/g, "")
+                    .replace(/\s{2,}/g, " ")
+                    .trim()
+                    .slice(0, 800);
             }
 
             const todosLosBlockes = q.ownerDocument.querySelectorAll("d2l-html-block");
@@ -212,21 +216,16 @@
 
             crearUI(q, id);
 
-            preguntarAI(enunciado, opts, imgData).then(({ procedimiento, letra, modelo }) => {
-                const qd = q.ownerDocument;
-                qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
-                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (m) => formulaAImagen(m));
-                qd.getElementById(`letra-${id}`).innerText = letra;
+            const { procedimiento, letra, modelo } = await preguntarAI(enunciado, opts, imgData);
+            const qd = q.ownerDocument;
+            qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
+            qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(...);
+            qd.getElementById(`letra-${id}`).innerText = letra;
 
-                const radios = q.querySelectorAll('input[type="radio"]');
-                const targetIdx = letra.charCodeAt(0) - 65;
-                if (radios[targetIdx]) radios[targetIdx].click();
-            }).catch(e => {
-                marcarError(q);
-                const errEl = q.ownerDocument.getElementById(`proc-${id}`);
-                if (errEl) errEl.innerText = "Error: " + e.message;
-            });
-        } catch (e) { marcarError(q); console.error("[Solver] Error:", e); }
+            const radios = q.querySelectorAll('input[type="radio"]');
+            const targetIdx = letra.charCodeAt(0) - 65;
+            if (radios[targetIdx]) radios[targetIdx].click();
+        } catch (e) { marcarError(q); console.error("[Solver] Error:", e.message); }
     }
 
     const observer = new IntersectionObserver((entries) => {
@@ -251,7 +250,23 @@
     }
 
     const quizDoc = getQuizDoc();
-    const preguntas = quizDoc.querySelectorAll("fieldset.dfs_m");
-    console.log("[Solver] Preguntas encontradas:", preguntas.length);
-    preguntas.forEach(q => observer.observe(q));
+
+    async function procesarEnSerie() {
+        const preguntas = Array.from(quizDoc.querySelectorAll("fieldset.dfs_m"));
+        console.log("[Solver] Preguntas encontradas:", preguntas.length);
+        for (let i = 0; i < preguntas.length; i++) {
+            const q = preguntas[i];
+            if (q.dataset.solved) continue;
+            q.dataset.solved = "true";
+            const id = Math.random().toString(36).substr(2, 5);
+            console.log(`[Solver] Procesando pregunta ${i + 1}/${preguntas.length}...`);
+            await resolverPregunta(q, id);
+            if (i < preguntas.length - 1) {
+                await new Promise(r => setTimeout(r, 5000));
+            }
+        }
+        console.log("[Solver] ✓ Listo.");
+    }
+
+    procesarEnSerie();
 })();
