@@ -13,11 +13,10 @@
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-    // ESTRATEGIA DE MODELOS (ID REALES DE GROQ PARA EVITAR ERROR 404)
-    const MODEL_ESTANDAR = "gemma2-9b-it"; 
-    const MODEL_PRO = "llama-3.3-70b-versatile"; 
-    const MODEL_VISION = "llama-3.2-11b-vision-preview";
-
+    // ESTRATEGIA DE MODELOS
+    const MODEL_ESTANDAR = "qwen/qwen3-32b";
+    const MODEL_PRO = "openai/gpt-oss-120b";
+    const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
 
     // TEMAS PRO PARA FÍSICA Y DETONADORES DEL 30%
     const KEYWORDS_PRO_FISICA = [
@@ -179,7 +178,7 @@ FORMATO OBLIGATORIO:
             preguntarAI(enunciado, opts, imgData).then(({ procedimiento, letra, modelo }) => {
                 const qd = q.ownerDocument;
                 qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
-                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\\(.*?\\\)|\\\[.*?\\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
+                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\(.*?\\)|\\[.*?\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
                 qd.getElementById(`letra-${id}`).innerText = letra;
 
                 const radios = q.querySelectorAll('input[type="radio"]');
