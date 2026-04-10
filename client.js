@@ -177,9 +177,26 @@
 
     async function resolverPregunta(q, id) {
         try {
-            const body = q.querySelector(".d2l-quiz-question-content") || q;
-            const imgEl = body.querySelector("img");
+            function leerBloque(el) {
+                if (!el) return "";
+                const sr = el.shadowRoot;
+                if (sr) return sr.textContent.replace(/mjx-container[\s\S]*?}/g, "").trim();
+                return el.innerText.trim();
+            }
+
+            const todosLosBlockes = q.ownerDocument.querySelectorAll("d2l-html-block");
+            const blocksAntes = Array.from(todosLosBlockes).filter(b => {
+                return q.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_PRECEDING;
+            });
+            const enunciado = leerBloque(blocksAntes[blocksAntes.length - 1]) || "Sin enunciado";
+
+            const opts = Array.from(q.querySelectorAll("tr.d2l-rowshadeonhover")).map((tr, i) => ({
+                letra: String.fromCharCode(65 + i),
+                texto: leerBloque(tr.querySelector("d2l-html-block"))
+            })).filter(o => o.texto.length > 0);
+
             let imgData = null;
+            const imgEl = q.querySelector("img");
             if (imgEl) {
                 const r = await fetch(imgEl.src, { credentials: "include" });
                 const b = await r.blob();
@@ -190,11 +207,8 @@
                 });
             }
 
-            const enunciado = (body.innerText || "").split("\n")[0];
-            const opts = Array.from(q.querySelectorAll("tr.d2l-rowshadeonhover, .d2l-quiz-answer-option")).map((opt, i) => ({
-                letra: String.fromCharCode(65 + i),
-                texto: opt.innerText.trim()
-            })).filter(o => o.texto.length > 0);
+            console.log(`[P${id}] Enunciado:`, enunciado.slice(0, 80));
+            console.log(`[P${id}] Opciones:`, opts.map(o => o.letra + ": " + o.texto.slice(0, 40)));
 
             crearUI(q, id);
 
@@ -212,7 +226,7 @@
                 const errEl = q.ownerDocument.getElementById(`proc-${id}`);
                 if (errEl) errEl.innerText = "Error: " + e.message;
             });
-        } catch (e) { marcarError(q); }
+        } catch (e) { marcarError(q); console.error("[Solver] Error:", e); }
     }
 
     const observer = new IntersectionObserver((entries) => {
