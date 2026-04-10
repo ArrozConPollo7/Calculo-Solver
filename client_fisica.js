@@ -29,7 +29,7 @@
 
     // ESTRATEGIA DE MODELOS
     const MODEL_ESTANDAR = "qwen/qwen3-32b";
-    const MODEL_PRO = "openai/gpt-oss-120b";
+    const MODEL_PRO = "qwen/qwen3-32b";
     const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
 
     // TEMAS PRO PARA FÍSICA Y DETONADORES DEL 30%
@@ -115,8 +115,16 @@ FORMATO OBLIGATORIO:
                     if (!r.ok) throw new Error("API Error " + r.status);
                     const data = await r.json();
                     const raw = data.choices[0].message.content;
-                    const letra = raw.split(nl).pop().replace(/[^A-E]/g, "").trim() || "A";
-                    return { procedimiento: raw.split("---")[0].trim(), letra, modelo: modeloParam };
+                    const lineas = raw.split(nl).map(l => l.trim()).filter(l => l.length > 0);
+                    const ultimaLinea = lineas[lineas.length - 1];
+                    const letra = ultimaLinea.replace(/[^A-E]/g, "").trim() || "A";
+                    
+                    // Extraer solo ecuaciones para la UI discreta
+                    const procLines = raw.split("---")[0].trim().split(nl);
+                    let formulaLines = procLines.filter(l => l.includes("$$") || l.includes("$") || l.includes("="));
+                    if (formulaLines.length === 0) formulaLines = procLines; // Backup
+                    
+                    return { procedimiento: formulaLines.join("<br>").replace(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (m) => formulaAImagen(m)), letra, modelo: modeloParam };
                 } catch (err) {
                     if (i === GROQ_KEYS.length * 2 - 1) throw err;
                     currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
@@ -140,13 +148,13 @@ FORMATO OBLIGATORIO:
     function crearUI(container, id) {
         const wrapper = document.createElement("div");
         wrapper.id = "sol-wrapper-" + id;
-        wrapper.style = "margin:8px 0; padding:10px; background:#121212; border-radius:6px; border-left:3px solid #00ff88; color:#eee; font-family:sans-serif; display:" + (window.__solverUIOpen ? "block" : "none") + ";";
+        wrapper.style = "margin:5px 0; padding:5px; background:transparent; border:none; color:#a0a0a0; font-family:monospace; font-size:10px; opacity:0.7; display:" + (window.__solverUIOpen ? "block" : "none") + ";";
         wrapper.innerHTML = `
-            <div style="display:flex;justify-content:space-between;font-size:10px;">
-                <span id="modo-${id}" style="color:#00ff88;font-weight:bold;">FISICA: CARGANDO...</span>
-                <span id="letra-${id}" style="background:#00ff88;color:#000;padding:1px 5px;border-radius:3px;font-weight:bold;">...</span>
+            <div style="display:flex;justify-content:space-between;font-size:9px;margin-bottom:2px;">
+                <span id="modo-${id}" style="opacity:0.5;">...</span>
+                <span id="letra-${id}" style="font-weight:bold;">?</span>
             </div>
-            <div id="proc-${id}" style="max-height:80px;overflow-y:auto;color:#bbb;font-size:11px;margin-top:5px;">Analizando dinámica...</div>
+            <div id="proc-${id}" style="max-height:100px;overflow-y:auto;line-height:1.2;">...</div>
         `;
         container.appendChild(wrapper);
     }
