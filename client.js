@@ -19,6 +19,20 @@
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
+    window.__solverUIOpen = false;
+    const toggleSolvers = (e) => {
+        if (e.key.toLowerCase() === "x") {
+            window.__solverUIOpen = !window.__solverUIOpen;
+            const state = window.__solverUIOpen ? "block" : "none";
+            const qd = getQuizDoc();
+            if (qd) qd.querySelectorAll("[id^='sol-wrapper-']").forEach(w => w.style.display = state);
+            document.querySelectorAll("[id^='sol-wrapper-']").forEach(w => w.style.display = state);
+        }
+    };
+    document.addEventListener("keydown", toggleSolvers);
+    try { getQuizDoc().addEventListener("keydown", toggleSolvers); } catch(e){}
+
+
     const MODEL_ESTANDAR = "qwen/qwen3-32b";
     const MODEL_PRO = "openai/gpt-oss-120b";
     const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
@@ -67,7 +81,7 @@
     ].join(nl);
 
     function formulaAImagen(latex) {
-        const clean = latex.replace(/\\\(/g, "").replace(/\\\)/g, "").replace(/\\\[/g, "").replace(/\\\]/g, "").replace(/\$/g, "").trim();
+        const clean = latex.replace(/\$\$/g, "").replace(/\$/g, "").replace(/\\\[/g, "").replace(/\\\]/g, "").replace(/\\\(/g, "").replace(/\\\)/g, "").trim();
         return `<img src="https://latex.codecogs.com/svg.latex?{\\color{White}${encodeURIComponent(clean)}}" style="vertical-align: middle; max-height: 22px;" />`;
     }
 
@@ -141,7 +155,7 @@
     function crearUI(container, id) {
         const wrapper = document.createElement("div");
         wrapper.id = "sol-wrapper-" + id;
-        wrapper.style = "margin:8px 0; padding:10px; background:#121212; border-radius:6px; border-left:3px solid #00d4ff; color:#eee; font-family:sans-serif; display:none;";
+        wrapper.style = "margin:8px 0; padding:10px; background:#121212; border-radius:6px; border-left:3px solid #00d4ff; color:#eee; font-family:sans-serif; display:" + (window.__solverUIOpen ? "block" : "none") + ";";
         wrapper.innerHTML = `
             <div style="display:flex;justify-content:space-between;font-size:10px;">
                 <span id="modo-${id}" style="color:#00d4ff;font-weight:bold;">SOLVER: CARGANDO...</span>
@@ -150,12 +164,6 @@
             <div id="proc-${id}" style="max-height:80px;overflow-y:auto;color:#bbb;font-size:11px;margin-top:5px;">Generando respuesta...</div>
         `;
         container.appendChild(wrapper);
-
-        document.addEventListener("keydown", (e) => {
-            if (e.key.toLowerCase() === "x") {
-                wrapper.style.display = wrapper.style.display === "none" ? "block" : "none";
-            }
-        });
     }
 
     // 3. TRES PUNTOS DE FALLO CASI INVISIBLES
@@ -193,7 +201,7 @@
             preguntarAI(enunciado, opts, imgData).then(({ procedimiento, letra, modelo }) => {
                 const qd = q.ownerDocument;
                 qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
-                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\\(.*?\\\)|\\\[.*?\\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
+                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (m) => formulaAImagen(m));
                 qd.getElementById(`letra-${id}`).innerText = letra;
 
                 const radios = q.querySelectorAll('input[type="radio"]');

@@ -13,6 +13,20 @@
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
+    window.__solverUIOpen = false;
+    const toggleSolvers = (e) => {
+        if (e.key.toLowerCase() === "x") {
+            window.__solverUIOpen = !window.__solverUIOpen;
+            const state = window.__solverUIOpen ? "block" : "none";
+            const qd = getQuizDoc();
+            if (qd) qd.querySelectorAll("[id^='sol-wrapper-']").forEach(w => w.style.display = state);
+            document.querySelectorAll("[id^='sol-wrapper-']").forEach(w => w.style.display = state);
+        }
+    };
+    document.addEventListener("keydown", toggleSolvers);
+    try { getQuizDoc().addEventListener("keydown", toggleSolvers); } catch(e){}
+
+
     // ESTRATEGIA DE MODELOS
     const MODEL_ESTANDAR = "qwen/qwen3-32b";
     const MODEL_PRO = "openai/gpt-oss-120b";
@@ -51,7 +65,7 @@ FORMATO OBLIGATORIO:
 - En la línea inferior al separador escribe ÚNICAMENTE la letra de la opción correcta (ej: A, B, C, D o E) sin paréntesis ni puntos.`;
 
     function formulaAImagen(latex) {
-        const clean = latex.replace(/\\\(/g, "").replace(/\\\)/g, "").replace(/\\\[/g, "").replace(/\\\]/g, "").replace(/\$/g, "").trim();
+        const clean = latex.replace(/\$\$/g, "").replace(/\$/g, "").replace(/\\\[/g, "").replace(/\\\]/g, "").replace(/\\\(/g, "").replace(/\\\)/g, "").trim();
         return `<img src="https://latex.codecogs.com/svg.latex?{\\color{White}${encodeURIComponent(clean)}}" style="vertical-align: middle; max-height: 22px;" />`;
     }
 
@@ -126,7 +140,7 @@ FORMATO OBLIGATORIO:
     function crearUI(container, id) {
         const wrapper = document.createElement("div");
         wrapper.id = "sol-wrapper-" + id;
-        wrapper.style = "margin:8px 0; padding:10px; background:#121212; border-radius:6px; border-left:3px solid #00ff88; color:#eee; font-family:sans-serif; display:none;";
+        wrapper.style = "margin:8px 0; padding:10px; background:#121212; border-radius:6px; border-left:3px solid #00ff88; color:#eee; font-family:sans-serif; display:" + (window.__solverUIOpen ? "block" : "none") + ";";
         wrapper.innerHTML = `
             <div style="display:flex;justify-content:space-between;font-size:10px;">
                 <span id="modo-${id}" style="color:#00ff88;font-weight:bold;">FISICA: CARGANDO...</span>
@@ -135,12 +149,6 @@ FORMATO OBLIGATORIO:
             <div id="proc-${id}" style="max-height:80px;overflow-y:auto;color:#bbb;font-size:11px;margin-top:5px;">Analizando dinámica...</div>
         `;
         container.appendChild(wrapper);
-
-        document.addEventListener("keydown", (e) => {
-            if (e.key.toLowerCase() === "x") {
-                wrapper.style.display = wrapper.style.display === "none" ? "block" : "none";
-            }
-        });
     }
 
     // 3. TRES PUNTOS DE FALLO CASI INVISIBLES
@@ -178,7 +186,7 @@ FORMATO OBLIGATORIO:
             preguntarAI(enunciado, opts, imgData).then(({ procedimiento, letra, modelo }) => {
                 const qd = q.ownerDocument;
                 qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
-                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\\\(.*?\\\)|\\\[.*?\\\]|\$.*?\$)/g, (m) => formulaAImagen(m));
+                qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (m) => formulaAImagen(m));
                 qd.getElementById(`letra-${id}`).innerText = letra;
 
                 const radios = q.querySelectorAll('input[type="radio"]');
