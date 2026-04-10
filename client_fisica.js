@@ -27,10 +27,10 @@
     try { getQuizDoc().addEventListener("keydown", toggleSolvers); } catch(e){}
 
 
-    // ESTRATEGIA DE MODELOS
-    const MODEL_ESTANDAR = "qwen/qwen3-32b";
-    const MODEL_PRO = "openai/gpt-oss-120b";
-    const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
+    // ESTRATEGIA DE MODELOS REAALES GROQ
+    const MODEL_ESTANDAR = "gemma2-9b-it";
+    const MODEL_PRO = "llama-3.3-70b-versatile";
+    const MODEL_VISION = "llama-3.2-11b-vision-preview";
 
     // TEMAS PRO PARA FÍSICA Y DETONADORES DEL 30%
     const KEYWORDS_PRO_FISICA = [
