@@ -1,67 +1,25 @@
+
 (function () {
-    // 4. PUNTO VERDE MUY PEQUEÑO PARA CONFIRMAR INICIO (Opacidad 15%)
+    // 4. PUNTO VERDE DE START (Opacidad baja)
     const initDot = document.createElement("div");
-    initDot.style = "position:fixed; top:2px; left:2px; width:4px; height:4px; border-radius:50%; background:#00ff00; opacity:0.15; z-index:99999; pointer-events:none;";
+    initDot.style = "position:fixed; top:2px; left:6px; width:4px; height:4px; border-radius:50%; background:#00ff88; opacity:0.15; z-index:99999; pointer-events:none;";
     document.body.appendChild(initDot);
 
     const nl = "\n";
-
-    // ========================================================================
-    // Las variables de entorno en Cloudflare (GROQ_KEY1, GROQ_KEY2... GROQ_KEY6)
-    // serán inyectadas EXACTAMENTE en esta variable cuando el Worker mande el archivo.
-    // Deja la siguiente línea tal cual, el Worker usará regex para reemplazar este array:
+    // TUS LLAVES A MANO (Pero el Worker inyectará las reales desde Cloudflare)
     const GROQ_KEYS = ["DEPLOY_REPLACE_ME"];
-    // ========================================================================
-    
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
     
+    // ESTRATEGIA DE MODELOS
     const MODEL_ESTANDAR = "qwen-3-32b";
     const MODEL_PRO = "gpt-oss-120b";
     const MODEL_VISION = "llama-4-scout-preview";
 
-    // TEMAS PRO PARA CÁLCULO
-    const KEYWORDS_PRO_CALCULO = ["impropia", "infinit", "converg", "diverg", "serie"];
-    
-    // EL PROMPT MAESTRO DE CÁLCULO
-    const SYSTEM_CALCULO = [
-      "Eres un matemático experto resolviendo parciales de Cálculo II, estrictamente apegado al texto de Stewart 8a edición. Tu precisión matemática es infalible.",
-      "ESTO ES CÁLCULO PURO, NO ESTADÍSTICA. No estás buscando funciones de densidad de probabilidad (PDF), estás buscando ÁREAS GEOMÉTRICAS literales.",
-      "",
-      "TEMAS DEL CURSO:",
-      "- Áreas, integral definida, TFC, antiderivadas, cambio neto (§4.9, 5.1-5.4)",
-      "- Técnicas: Sustitución, partes, fracciones parciales, sustitución trigonométrica (§5.5, 7.1-7.4)",
-      "- Aplicaciones: Área entre curvas, volúmenes (discos/arandelas, cascarones), trabajo, valor promedio (§6.1-6.5)",
-      "- Aplicaciones avanzadas: Longitud de arco, superficie de revolución (§8.1-8.2)",
-      "- Física: Fuerza hidrostática, centros de masa (§8.3-8.5)",
-      "- Integrales impropias (§7.8)",
-      "- Sucesiones, series, convergencia, Taylor/Maclaurin (§11.1-11.11)",
-      "",
-      "REGLAS SUPREMAS:",
-      "1. EL OBJETIVO DETERMINA EL PROCEDIMIENTO: MIRA LAS OPCIONES ANTES de operar a ciegas. ¿Las opciones son valores numéricos decimales? Resuelve hasta el final. ¿Las opciones son INTEGRALES SIN RESOLVER (fórmulas)? Entonces TU ÚNICO TRABAJO ES PLANTEAR, NO LA RESUELVAS.",
-      "2. PLANTEAMIENTOS DE ÁREA (CÁLCULO PURO, NO ESTADÍSTICA): El área geométrica bajo la curva $f(x)$ es estrictamente $\\int_a^b f(x) dx$. NUNCA multipliques la función por derivadas internas ni agregues coeficientes 0.5 o constantes mágicas para fabricar un 'área=1' (no confundas cálculo con distribuciones exponenciales de probabilidad). Calca la función literalmente en la integral.",
-      "3. NO INVENTES problemas. Si te dan una gráfica o enunciado en una imagen, esa es la verdad absoluta. Si el texto falla, confía en la imagen.",
-      "4. JAMÁS DIGAS 'Ninguna opción coincide'. Si tu resultado preliminar no se ve igual a las opciones, APLICA ÁLGEBRA o cambia la variable para empatar lógicamente con una de las opciones.",
-      "5. Superficie de Revolución:",
-      "   - Giro eje Y: El radio es $x$ (o $g(y)$). Área $dA = 2\\pi x \\, ds$.",
-      "   - Giro eje X: El radio es $y$ (o $f(x)$). Área $dA = 2\\pi y \\, ds$.",
-      "   - ¡Cuidado con sustituciones $u$! Si $u=e^x$, los límites también cambian.",
-      "6. Tópicos Avanzados (MUY IMPORTANTE):",
-      "   - Integrales Impropias: ¡ALERTA DE SIGNOS! Analiza algebraicamente a dónde tiende el exponente. Ej: $e^{-(-\\infty)} = e^{\\infty} = \\infty$ (DIVERGE).",
-      "   - Series y Convergencia: Declara EXACTAMENTE qué prueba estás usando y demuéstrala.",
-      "   - Polinomios de Taylor: Asegúrate de revisar alrededor de qué centro $a$ está calculado.",
-      "7. CUIDADO CON PREGUNTAS NEGATIVAS: Si el enunciado dice 'NO corresponde', 'FALSA', o 'INCORRECTA', tu objetivo se INVIERTE. Debes evaluar todas las opciones y encontrar la UNICA que tiene un ERROR matemático (ej. un signo menos faltante, un límite mal evaluado). Tres serán correctas, una será un error explícito. ¡Atrapa la que está MAL!",
-      "8. ESTRICTAMENTE PROCEDIMIENTOS. No uses relleno de texto.",
-      "",
-      "ESTRUCTURA INQUEBRANTABLE:",
-      "Tema: (Concepto teórico evaluado)",
-      "Procedimiento: (Paso 1: Planteamiento de la base teórica (ej. $ds = \\sqrt{1+(f')^2}dx$). Paso 2: Derivación y cuadrados. Paso 3: Aplicación de cambios de variable para forzar el empate lógico con las opciones. Usa exclusivamente código LaTeX conectado por iguales.)",
-      "Resultado: (Formulación final numérica o integral sin resolver)",
-      "Verificación: (Demostración rigurosa de por qué una de las opciones es un espejo exacto del Resultado)",
-      "---",
-      "LETRA",
-      "(La última línea obligatoriamente tiene SOLO UNA LETRA que indique la opción verdadera: A, B, C, D o E)"
-    ].join(nl);
+    // TEMAS PRO PARA FÍSICA
+    const KEYWORDS_PRO_FISICA = ["circular", "centrípeta", "fuerza central", "energía", "conservación", "momento", "lineal", "colisión", "choque", "elástico"];
+
+    const SYSTEM_FISICA = "Eres un físico experto en Mecánica (Serway). Define sistema de referencia. Resuelve algebraicamente paso a paso. Selecciona la opción que matemáticamente corresponda al resultado final.";
 
     function formulaAImagen(latex) {
         const clean = latex.replace(/\\\(/g, "").replace(/\\\)/g, "").replace(/\\\[/g, "").replace(/\\\]/g, "").replace(/\$/g, "").trim();
@@ -73,7 +31,7 @@
         let modeloAElegir = MODEL_ESTANDAR;
         
         // 1. Detección PRO
-        if (KEYWORDS_PRO_CALCULO.some(k => enunciadoMinus.includes(k))) {
+        if (KEYWORDS_PRO_FISICA.some(k => enunciadoMinus.includes(k))) {
             modeloAElegir = MODEL_PRO;
         }
         if (imagen) modeloAElegir = MODEL_VISION;
@@ -84,14 +42,14 @@
             const p = {
                 model: modeloParam,
                 messages: [
-                    { role: "system", content: SYSTEM_CALCULO },
-                    { role: "user", content: "Resuelve algebraicamente:\n\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
+                    { role: "system", content: SYSTEM_FISICA },
+                    { role: "user", content: "Resuelve con rigor analítico:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
                 ],
                 temperature: 0.1
             };
             if (imagen) {
                 p.messages[1].content = [
-                    { type: "text", text: "Analiza la gráfica o fórmula de la imagen y resuelve:\n\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr },
+                    { type: "text", text: "Analiza el DCL o diagrama vectorial y resuelve:\n" + enunciado },
                     { type: "image_url", image_url: { url: "data:" + imagen.mimeType + ";base64," + imagen.base64 } }
                 ];
             }
@@ -129,6 +87,7 @@
         } catch (error) {
             // 2. FALLBACK A QWEN SI EL PRO/VISUAL FALLA CRÍTICAMENTE
             if (modeloAElegir !== MODEL_ESTANDAR) {
+                console.warn("Fallback a Qwen en Física desde:", modeloAElegir);
                 return await realizarPeticion(MODEL_ESTANDAR);
             }
             throw error;
@@ -138,13 +97,13 @@
     function crearUI(container, id) {
         const wrapper = document.createElement("div");
         wrapper.id = "sol-wrapper-" + id;
-        wrapper.style = "margin:8px 0; padding:10px; background:#121212; border-radius:6px; border-left:3px solid #00d4ff; color:#eee; font-family:sans-serif; display:none;";
+        wrapper.style = "margin:8px 0; padding:10px; background:#121212; border-radius:6px; border-left:3px solid #00ff88; color:#eee; font-family:sans-serif; display:none;";
         wrapper.innerHTML = `
             <div style="display:flex;justify-content:space-between;font-size:10px;">
-                <span id="modo-${id}" style="color:#00d4ff;font-weight:bold;">SOLVER: CARGANDO...</span>
-                <span id="letra-${id}" style="background:#00d4ff;color:#000;padding:1px 5px;border-radius:3px;font-weight:bold;">...</span>
+                <span id="modo-${id}" style="color:#00ff88;font-weight:bold;">FISICA: CARGANDO...</span>
+                <span id="letra-${id}" style="background:#00ff88;color:#000;padding:1px 5px;border-radius:3px;font-weight:bold;">...</span>
             </div>
-            <div id="proc-${id}" style="max-height:80px;overflow-y:auto;color:#bbb;font-size:11px;margin-top:5px;">Generando respuesta...</div>
+            <div id="proc-${id}" style="max-height:80px;overflow-y:auto;color:#bbb;font-size:11px;margin-top:5px;">Analizando dinámica...</div>
         `;
         container.appendChild(wrapper);
 

@@ -20,12 +20,19 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
-    const GROQ_KEY    = env.GROQ_KEY    || "";
+    // Recolectar múltiples llaves
+    const keys = [];
+    for (let i = 1; i <= 20; i++) {
+      if (env[`GROQ_KEY${i}`]) keys.push(env[`GROQ_KEY${i}`]);
+    }
+    // Si usaste la variable normal sin número
+    if (keys.length === 0 && env.GROQ_KEY) keys.push(env.GROQ_KEY);
+
     const GITHUB_TOKEN = env.GITHUB_TOKEN || "";
 
     // Elegir archivo según ruta
     const path = new URL(request.url).pathname;
-    const FILE = path === "/fisica" ? "fisica.js" : "client.js";
+    const FILE = path === "/fisica" ? "client_fisica.js" : "client.js";
 
     // GitHub Contents API — funciona con repos privados + token
     const apiUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}`;
@@ -51,7 +58,10 @@ export default {
       }
 
       let script = await res.text();
-      script = script.replace("PLACEHOLDER_KEY", GROQ_KEY);
+      // Reemplazo del array "DEPLOY_REPLACE_ME" por las llaves reales de Cloudflare
+      if (keys.length > 0) {
+         script = script.replace('["DEPLOY_REPLACE_ME"]', JSON.stringify(keys));
+      }
 
       return new Response(script, { status: 200, headers: CORS_HEADERS });
 
