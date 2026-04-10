@@ -24,13 +24,13 @@
         }
     };
     document.addEventListener("keydown", toggleSolvers);
-    try { getQuizDoc().addEventListener("keydown", toggleSolvers); } catch(e){}
+    try { getQuizDoc().addEventListener("keydown", toggleSolvers); } catch (e) { }
 
 
-    // ESTRATEGIA DE MODELOS GARANTIZADOS GROQ
-    const MODEL_ESTANDAR = "llama3-8b-8192";
-    const MODEL_PRO = "llama-3.3-70b-versatile";
-    const MODEL_VISION = "llama-3.2-11b-vision-preview";
+    // ESTRATEGIA DE MODELOS
+    const MODEL_ESTANDAR = "qwen/qwen3-32b";
+    const MODEL_PRO = "openai/gpt-oss-120b";
+    const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
 
     // TEMAS PRO PARA FÍSICA Y DETONADORES DEL 30%
     const KEYWORDS_PRO_FISICA = [
@@ -88,8 +88,7 @@ FORMATO OBLIGATORIO:
                     { role: "system", content: SYSTEM_FISICA },
                     { role: "user", content: "Resuelve con rigor analítico:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
                 ],
-                temperature: 0.1,
-                max_tokens: 4000
+                temperature: 0.1
             };
             if (imagen) {
                 p.messages[1].content = [
@@ -113,18 +112,12 @@ FORMATO OBLIGATORIO:
                         await new Promise(res => setTimeout(res, 1500));
                         continue;
                     }
-                    if (!r.ok) {
-                        const txt = await r.text();
-                        console.error("GROQ API ERROR:", r.status, txt, "Payload:", p);
-                        if (r.status === 400) throw new Error(`HTTP 400 Fatal: ${txt.substring(0, 50)}`);
-                        throw new Error(`Error API: ${r.status} ` + txt.substring(0,50));
-                    }
+                    if (!r.ok) throw new Error("API Error " + r.status);
                     const data = await r.json();
                     const raw = data.choices[0].message.content;
                     const letra = raw.split(nl).pop().replace(/[^A-E]/g, "").trim() || "A";
                     return { procedimiento: raw.split("---")[0].trim(), letra, modelo: modeloParam };
                 } catch (err) {
-                    if (err.message.includes("HTTP 400 Fatal")) throw err;
                     if (i === GROQ_KEYS.length * 2 - 1) throw err;
                     currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
                     await new Promise(res => setTimeout(res, 1000));
