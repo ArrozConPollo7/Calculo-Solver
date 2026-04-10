@@ -204,7 +204,7 @@ FORMATO OBLIGATORIO:
             const { procedimiento, letra, modelo } = await preguntarAI(enunciado, opts, imgData);
             const qd = q.ownerDocument;
             qd.getElementById(`modo-${id}`).innerText = "MODO: " + modelo.toUpperCase();
-            qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(...);
+            qd.getElementById(`proc-${id}`).innerHTML = procedimiento.replace(/\n/g, "<br>").replace(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (m) => formulaAImagen(m));
             qd.getElementById(`letra-${id}`).innerText = letra;
 
             const radios = q.querySelectorAll('input[type="radio"]');
