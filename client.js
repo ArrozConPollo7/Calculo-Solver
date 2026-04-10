@@ -129,7 +129,11 @@
                         await new Promise(res => setTimeout(res, 1500));
                         continue;
                     }
-                    if (!r.ok) throw new Error("API Error " + r.status);
+                    if (!r.ok) {
+                        const txt = await r.text();
+                        console.error("GROQ API ERROR:", r.status, txt, "Payload:", p);
+                        throw new Error(`Error API: ${r.status} ` + txt.substring(0,50));
+                    }
                     const data = await r.json();
                     const raw = data.choices[0].message.content;
                     const letra = raw.split(nl).pop().replace(/[^A-E]/g, "").trim() || "A";
