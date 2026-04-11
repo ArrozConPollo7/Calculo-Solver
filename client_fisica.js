@@ -10,12 +10,9 @@
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-    // Kimi K2 para texto (mejor razonamiento multi-paso)
-    // Qwen3-32B como fallback
-    // Llama 4 Scout para imágenes/diagramas de física
     const MODEL_TEXTO = "moonshotai/kimi-k2-instruct-0905";
-    const MODEL_BACKUP = "qwen/qwen3-32b";
     const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
+    const MODEL_BACKUP = "qwen/qwen3-32b";
 
     const nl = String.fromCharCode(10);
     const slash = String.fromCharCode(92);
@@ -31,35 +28,30 @@
             const d = i1?.contentDocument || document;
             d.removeEventListener("keydown", window.__groq_toggle_fn__);
             const i2 = d.querySelector("iframe#FRM_page") || d.querySelector("iframe[name='pageFrame']");
-            i2?.contentWindow.removeEventListener("keydown", window.__groq_toggle_fn__);
+            i2?.contentWindow?.removeEventListener("keydown", window.__groq_toggle_fn__);
         } catch (e) { }
     }
-
-    // —— KaTeX ————————————————————————————————————————————————————
-    async function cargarKaTeX() {
-        if (window.katex) return;
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
-        document.head.appendChild(link);
-        const loadScript = src => new Promise((res, rej) => {
-            const s = document.createElement("script"); s.src = src;
-            s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        });
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js");
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js");
+    if (window.__groq_observer__) {
+        window.__groq_observer__.disconnect();
     }
 
-    // —— Procesamiento de texto ————————————————————————————————————
+    window.__groq_observer__ = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+            const div = e.target.__groq_div;
+            if (!div) return;
+            div.dataset.onScreen = e.isIntersecting ? "true" : "false";
+            div.style.display = (window.__groq__.visible && e.isIntersecting) ? "block" : "none";
+        });
+    }, { threshold: 0.1 });
+
+    // —— Procesamiento de Texto ————————————————————————————————————
     function filtrarLineasExplicativas(cuerpo) {
         const lineas = cuerpo.split(nl);
         const filtradas = lineas.filter(l => {
             const t = l.trim();
             if (t.length === 0) return true;
-            if (t.includes("$")) return true;
-            if (t.includes(":") || t.startsWith("#")) return true;
-            if (new RegExp("^[0-9]+[\\.\\)]").test(t)) return true;
-            if (t.length > 50 && (t.includes(slash) || t.includes("{") || t.includes("}"))) return true;
+            if (t.startsWith("Tema:") || t.startsWith("Procedimiento:") || t.startsWith("Resultado:") || t.startsWith("Verificación:")) return true;
+            if (t.includes("$") || t.includes(slash) || t.includes("=")) return true;
             return false;
         });
         return filtradas.join(nl);
@@ -80,54 +72,62 @@
         texto = texto
             .split(slash + "(").join("$").split(slash + ")").join("$")
             .split(slash + "[").join("$$").split(slash + "]").join("$$");
+
+        texto = texto.replace(new RegExp("\\$\\$([\\s\\S]*?)\\$\\$", "g"), (m, p1) => {
+            let formula = p1.trim().replace(new RegExp("^[\\s]*" + slash + "displaystyle"), "").trim();
+            const url = "https://latex.codecogs.com/svg.latex?" + slash + "displaystyle&space;" + encodeURIComponent(formula);
+            return "<div style='text-align:center;margin:4px 0;'><img src='" + url + "' alt='math' style='max-width:100%;'></div>";
+        });
+        texto = texto.replace(new RegExp("\\$([^\\$]+)\\$", "g"), (m, p1) => {
+            const url = "https://latex.codecogs.com/svg.latex?" + slash + "inline&space;" + encodeURIComponent(p1.trim());
+            return "<img src='" + url + "' alt='math' style='transform:translateY(3px);max-width:100%;'>";
+        });
+
         return texto.split(nl).map(l => {
-            if (l.includes("$")) return l;
             return l.replace(new RegExp("[*][*]([^*]+)[*][*]", "g"), "<strong>$1</strong>");
         }).join("<br>");
-    }
-
-    function renderizarMath(div) {
-        if (!window.renderMathInElement) return;
-        try {
-            window.renderMathInElement(div, {
-                delimiters: [
-                    { left: "$$", right: "$$", display: true },
-                    { left: "$", right: "$", display: false }
-                ],
-                throwOnError: false, strict: false
-            });
-        } catch (e) { }
     }
 
     // —— UI ———————————————————————————————————————————————————————
     function crearDivJustificacion(p) {
         const el = document.createElement("div");
         el.className = "__groq_justification_div";
-        el.style.cssText = "display:none;width:100%;max-height:160px;overflow-y:auto;background:transparent;border-top:1px solid rgba(0,0,0,0.07);font-size:11.5px;padding:8px 0;margin-bottom:12px;font-family:system-ui,sans-serif;color:#333;line-height:1.5;";
+        el.style.cssText = "display:none;width:100%;max-height:80px;overflow-y:auto;background:transparent;border-top:1px solid rgba(0,0,0,0.07);font-size:11px;padding:4px 0;margin-bottom:8px;font-family:system-ui,sans-serif;color:#333;line-height:1.4;";
         const target = p.elemento;
         if (target.nextSibling) {
             target.parentElement.insertBefore(el, target.nextSibling);
         } else {
             target.parentElement.appendChild(el);
         }
+        p.elemento.__groq_div = el;
+        window.__groq_observer__.observe(p.elemento);
         return el;
     }
 
     function actualizarVisibilidad() {
         document.querySelectorAll(".__groq_justification_div").forEach(d => {
-            d.style.display = window.__groq__.visible ? "block" : "none";
+            const onScreen = d.dataset.onScreen === "true";
+            d.style.display = (window.__groq__.visible && onScreen) ? "block" : "none";
         });
     }
 
     const toggleX = (e) => {
         if (e.key.toLowerCase() !== 'x') return;
-        if (window.__groq_last_t === e.timeStamp) return;
-        window.__groq_last_t = e.timeStamp;
+        const now = Date.now();
+        if (window.__groq_last_t && now - window.__groq_last_t < 300) return;
+        window.__groq_last_t = now;
         window.__groq__.visible = !window.__groq__.visible;
         actualizarVisibilidad();
     };
     window.__groq_toggle_fn__ = toggleX;
     window.addEventListener("keydown", toggleX);
+    try {
+        const i1 = document.getElementById("ctl_2");
+        const d = i1?.contentDocument || document;
+        d.addEventListener("keydown", toggleX);
+        const i2 = d.querySelector("iframe#FRM_page") || d.querySelector("iframe[name='pageFrame']");
+        i2?.contentWindow?.addEventListener("keydown", toggleX);
+    } catch (e) { }
 
     // —— DOM Utils ——————————————————————————————————————————————
     function htmlToText(html) {
@@ -139,12 +139,13 @@
     }
 
     async function extractImageSrc(el) {
+        if (!el) return null;
         for (let t = 0; t < 10; t++) {
-            const rend = el?.querySelector("div.d2l-html-block-rendered img");
+            const rend = el.querySelector("div.d2l-html-block-rendered img");
             if (rend) return rend.getAttribute("src");
             await new Promise(r => setTimeout(r, 200));
         }
-        return el?.querySelector("img")?.getAttribute("src");
+        return el.querySelector("img")?.getAttribute("src");
     }
 
     async function fetchBase64(src) {
@@ -158,45 +159,13 @@
         });
     }
 
-    // —— Extracción robusta de letra ——————————————————————————————
-    function extraerLetra(raw) {
-        const rawLines = raw.split(new RegExp("[\r\n]+"));
-
-        // 1. Separador --- seguido de letra sola
-        const sepIdx = rawLines.map(l => l.trim()).lastIndexOf("---");
-        if (sepIdx !== -1 && sepIdx < rawLines.length - 1) {
-            const afterSep = rawLines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
-            if (afterSep.length > 0 && new RegExp("^[A-E]$").test(afterSep[0])) {
-                return afterSep[0].toUpperCase();
-            }
-        }
-
-        // 2. Última línea exactamente una letra
-        for (let li = rawLines.length - 1; li >= 0; li--) {
-            const l = rawLines[li].trim();
-            if (new RegExp("^[A-E]$").test(l)) return l;
-        }
-
-        // 3. Frases explícitas en últimas 300 chars
-        const tail = raw.slice(-300);
-        const m = tail.match(new RegExp("(?:respuesta|opci[oó]n|letra)[^A-Za-z]*([A-E])(?:[^A-Za-z]|$)", "i"));
-        if (m) return m[1].toUpperCase();
-
-        // 4. letraSeccion aislada
-        const res = limpiarRespuestaModelo(raw);
-        const m2 = res.letraSeccion.toUpperCase().match(new RegExp("^[\\s]*([A-E])[\\s]*$"));
-        if (m2) return m2[1];
-
-        return "A";
-    }
-
-    // —— Prompt Física 1 ——————————————————————————————————————————
-    const SYSTEM_FISICA = [
+    // —— Prompt Cálculo II ————————————————————————————————————————
+    const SYSTEM_CALCULO = [
         "Eres un profesor universitario experto en FÍSICA MECÁNICA (NC1001 EAFIT — Serway & Jewett 10ª ed.) con 20 años de experiencia resolviendo exámenes de selección múltiple.",
         "Tu única tarea: identificar la respuesta correcta y justificarla con rigor físico y matemático absoluto.",
         "",
-        "TEMAS CLAVE:",
-        "LEYES DE NEWTON Y FUERZAS (g = 9.8 m/s² siempre):",
+        "TEMAS CLAVE (g = 9.8 m/s² siempre):",
+        "LEYES DE NEWTON Y FUERZAS:",
         "- Segunda ley: ΣF = ma vectorial por eje.",
         "- Fricción estática: f_s ≤ μ_s·N. Cinética: f_k = μ_k·N.",
         "- Fuerza a ángulo θ MODIFICA la Normal: N = mg ∓ F·sin(θ).",
@@ -214,7 +183,7 @@
         "- Teorema trabajo-energía: W_neto = ΔK.",
         "- Sin fricción: K_i + U_i = K_f + U_f.",
         "- Con fricción: K_i + U_i = K_f + U_f + f_k·d.",
-        "- Resorte: F=kx, U_e=½kx². Doble extensión → 4× la energía.",
+        "- Resorte: F=kx, U_e=½kx². Doble extensión → energía ×4.",
         "",
         "COLISIONES:",
         "- Inelástica perfecta: momento conservado, KE NO.",
@@ -234,12 +203,12 @@
         "REGLAS:",
         "- Todo en español. g = 9.8 m/s².",
         "- LaTeX inline $...$ y display $$...$$",
-        "- JAMÁS digas 'Ninguna opción coincide'. Siempre elige la más cercana.",
-        "- CUIDADO: preguntas con 'NO', 'FALSA', 'INCORRECTA' → busca el ÚNICO error.",
-        "- Al final escribe exactamente '---' y en la siguiente línea SOLO la letra (A, B, C, D o E)."
+        "- JAMÁS digas Ninguna opción coincide. Siempre elige la más cercana.",
+        "- CUIDADO: preguntas con NO, FALSA, INCORRECTA → busca el ÚNICO error.",
+        "- Al final escribe exactamente --- y en la siguiente línea SOLO la letra (A, B, C, D o E)."
     ].join(nl);
 
-    // —— Llamada a la API con rotación de keys ————————————————————
+    // —— API con rotación de keys ————————————————————————————————
     async function preguntarAI(enunciado, opciones, imagen) {
         const optsStr = opciones.map(o => o.letra + ") " + o.texto).join(nl);
         const model = imagen ? MODEL_VISION : MODEL_TEXTO;
@@ -248,15 +217,15 @@
             const p = {
                 model: modeloParam,
                 messages: [
-                    { role: "system", content: SYSTEM_FISICA },
-                    { role: "user", content: (imagen ? "Analiza el diagrama o gráfica adjunta. " : "") + "Pregunta: " + enunciado + nl + nl + "Opciones:" + nl + optsStr }
+                    { role: "system", content: SYSTEM_CALCULO },
+                    { role: "user", content: "Analiza exhaustivamente la pregunta y determina el enunciado real.\nPREGUNTA:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
                 ],
                 max_tokens: imagen ? 4096 : 8000,
                 temperature: 0.1
             };
             if (imagen) {
                 p.messages[1].content = [
-                    { type: "text", text: SYSTEM_FISICA + nl + enunciado + nl + optsStr },
+                    { type: "text", text: "Lee el enunciado y analiza cuidadosamente la imagen, la cual contiene la fórmula o gráfica vital de la pregunta. Responde a lo que se te pide en base a esa imagen.\n\nENUNCIADO:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr },
                     { type: "image_url", image_url: { url: "data:" + imagen.mimeType + ";base64," + imagen.base64 } }
                 ];
             }
@@ -274,14 +243,13 @@
                     });
                     if (r.status === 429) {
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                        const wait = 20 + i * 10;
+                        const wait = 25 + i * 15;
                         console.log("[Solver Física] Rate limit — rotando key, esperando " + wait + "s...");
                         await new Promise(res => setTimeout(res, wait * 1000));
                         continue;
                     }
-                    if (!r.ok) throw new Error("API Error " + r.status);
-                    const data = await r.json();
-                    return data.choices[0].message.content;
+                    if (!r.ok) throw new Error("Groq API Error: " + r.status);
+                    return await r.json();
                 } catch (err) {
                     if (i === GROQ_KEYS.length * 3 - 1) throw err;
                     currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
@@ -290,16 +258,44 @@
             }
         };
 
-        let raw;
+        let data;
         try {
-            raw = await hacerPeticion(model);
+            data = await hacerPeticion(model);
         } catch (e) {
-            console.warn("[Solver Física] Kimi falló, intentando con Qwen...", e.message);
-            raw = await hacerPeticion(MODEL_BACKUP);
+            console.warn("[Solver Física] Kimi falló, usando Qwen como fallback...");
+            data = await hacerPeticion(MODEL_BACKUP);
         }
 
-        const letra = extraerLetra(raw);
+        const raw = data.choices[0].message.content;
         const res = limpiarRespuestaModelo(raw);
+
+        // Extracción robusta de letra — cascada de 4 métodos
+        let letra = null;
+        const rawLines = raw.split(new RegExp("[\r\n]+"));
+        const sepIdx = rawLines.map(l => l.trim()).lastIndexOf("---");
+        if (sepIdx !== -1 && sepIdx < rawLines.length - 1) {
+            const afterSep = rawLines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
+            if (afterSep.length > 0 && new RegExp("^[A-E]$").test(afterSep[0])) {
+                letra = afterSep[0].toUpperCase();
+            }
+        }
+        if (!letra) {
+            const m = res.letraSeccion.toUpperCase().match(new RegExp("^[\\s]*([A-E])[\\s]*$"));
+            if (m) letra = m[1];
+        }
+        if (!letra) {
+            const tail = raw.slice(-300);
+            const m = tail.match(new RegExp("(?:respuesta|opci[oó]n|letra)[^A-Za-z]*([A-E])(?:[^A-Za-z]|$)", "i"));
+            if (m) letra = m[1].toUpperCase();
+        }
+        if (!letra) {
+            for (let li = rawLines.length - 1; li >= 0; li--) {
+                const l = rawLines[li].trim();
+                if (new RegExp("^[A-E]$").test(l)) { letra = l; break; }
+            }
+        }
+        if (!letra) letra = "A";
+
         return { letra, justificacion: res.justificacion };
     }
 
@@ -315,8 +311,6 @@
     }
 
     // —— Motor Principal ————————————————————————————————————————
-    await cargarKaTeX();
-
     const doc = (() => {
         try {
             const i1 = document.getElementById("ctl_2");
@@ -326,20 +320,35 @@
         } catch (e) { return document; }
     })();
 
-    const questions = [];
+    function buscarEnunciado(elemento) {
+        let prev = elemento.previousElementSibling;
+        while (prev) {
+            if (prev.tagName.toLowerCase() === "d2l-html-block") return prev;
+            const inner = prev.querySelector("d2l-html-block");
+            if (inner && !prev.querySelector("input[type=radio]")) return inner;
+            prev = prev.previousElementSibling;
+        }
+        return null;
+    }
 
+    const questions = [];
     doc.querySelectorAll("fieldset.dfs_m").forEach(fs => {
         const opts = [];
         fs.querySelectorAll("tr.d2l-rowshadeonhover").forEach((r, i) => {
             const b = r.querySelector("d2l-html-block");
             opts.push({ row: r, letra: "ABCDE"[i], texto: htmlToText(b?.getAttribute("html")) });
         });
-        questions.push({ tipo: "parcial", elemento: fs, opts, b: fs.previousElementSibling });
+        const b = buscarEnunciado(fs);
+        questions.push({ tipo: "parcial", elemento: fs, opts, b });
     });
 
     if (questions.length === 0) {
         doc.querySelectorAll(".d2l-quiz-question-autosave-container").forEach(c => {
-            const b = c.querySelector("d2l-html-block");
+            const allBlocks = Array.from(c.querySelectorAll("d2l-html-block"));
+            const b = allBlocks.find(block => {
+                const tr = block.closest("tr");
+                return !tr || !tr.querySelector("input[type=radio]");
+            });
             const opts = [];
             c.querySelectorAll("tr").forEach((r) => {
                 const radio = r.querySelector("input[type=radio]");
@@ -350,7 +359,7 @@
         });
     }
 
-    console.log("%c⚡ Física 1 Solver — " + questions.length + " preguntas | Kimi K2 + Qwen3-32B", "color:#00ff88;font-weight:bold;font-size:13px;");
+    console.log("%c⚡ Cálculo II Solver — " + questions.length + " preguntas | Kimi K2 + Qwen backup", "color:#00ff88;font-weight:bold;font-size:13px;");
 
     for (let i = 0; i < questions.length; i++) {
         const p = questions[i];
@@ -363,20 +372,16 @@
             const src = await extractImageSrc(p.b);
             const img = src ? await fetchBase64(src) : null;
 
-            console.log("[Física P" + (i + 1) + "] Enunciado:", enunciado.slice(0, 80));
-            console.log("[Física P" + (i + 1) + "] Opciones:", p.opts.map(o => o.letra + ": " + o.texto.slice(0, 50)));
+            console.log("[Física P" + (i + 1) + "] Enunciado:", enunciado.slice(0, 100));
+            console.log("[Física P" + (i + 1) + "] Opciones:", p.opts.map(o => o.letra + ": " + o.texto.slice(0, 60)));
 
             const res = await preguntarAI(enunciado, p.opts, img);
 
             div.innerHTML = "<div>" + prepararHTML(res.justificacion) + "</div>" +
-                "<div style='color:#16a34a;font-weight:bold;margin-top:8px;font-size:13px;'>✓ Respuesta: " + res.letra + "</div>";
-
-            renderizarMath(div);
-            setTimeout(() => renderizarMath(div), 300);
-            setTimeout(() => renderizarMath(div), 1000);
+                "<div style='color:#16a34a;font-weight:bold;margin-top:8px;font-size:12px;'>✓ Letra: " + res.letra + "</div>";
 
             marcar(p, res.letra);
-            console.log("%c✅ Física P" + (i + 1) + " → " + res.letra, "color:lime;font-weight:bold;");
+            console.log("%c✅ P" + (i + 1) + " → " + res.letra, "color:lime;font-weight:bold;");
 
             if (i < questions.length - 1) {
                 const delay = 12000 + Math.random() * 8000;
@@ -385,9 +390,9 @@
             }
         } catch (e) {
             div.innerHTML = "<span style='color:#dc2626'>❌ Error: " + e.message + "</span>";
-            console.error("Error en Física P" + (i + 1), e);
+            console.error("Error en P" + (i + 1), e);
         }
     }
 
-    console.log("%c✅ Solver Física completado.", "color:#00ff88;font-weight:bold;font-size:14px;");
+    console.log("%c✅ Solver completado.", "color:lime;font-weight:bold;font-size:14px;");
 })();
