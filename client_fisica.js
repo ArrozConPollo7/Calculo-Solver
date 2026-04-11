@@ -10,9 +10,9 @@
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-    const MODEL_TEXTO = "moonshotai/kimi-k2-instruct-0905";
+    const MODEL_TEXTO = "qwen/qwen3-32b";
     const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
-    const MODEL_BACKUP = "qwen/qwen3-32b";
+    const MODEL_BACKUP = "moonshotai/kimi-k2-instruct-0905";
 
     const nl = String.fromCharCode(10);
     const slash = String.fromCharCode(92);
