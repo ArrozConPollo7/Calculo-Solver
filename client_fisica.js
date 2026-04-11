@@ -51,10 +51,10 @@
     function setIndicador(dot, estado) {
         if (!dot) return;
         const map = {
-            detect:  { bg: "#9ca3af", op: "0.30" },
+            detect: { bg: "#9ca3af", op: "0.30" },
             loading: { bg: "#f59e0b", op: "0.60" },
-            done:    { bg: "#22c55e", op: "0.70" },
-            error:   { bg: "#ef4444", op: "0.55" }
+            done: { bg: "#22c55e", op: "0.70" },
+            error: { bg: "#ef4444", op: "0.55" }
         };
         const s = map[estado] || map.detect;
         dot.style.background = s.bg;
@@ -75,7 +75,7 @@
             try {
                 d.querySelectorAll(".__groq_panel__").forEach(p => p.style.display = visible ? "none" : "none");
                 d.querySelectorAll(".__groq_dot__").forEach(dot => dot.style.display = visible ? "inline-block" : "none");
-            } catch(err) {}
+            } catch (err) { }
         });
         // Los paneles se abren al hacer click en h2, solo ocultamos los dots
         console.log("[Solver] Indicadores " + (visible ? "visibles" : "ocultos"));
@@ -87,7 +87,7 @@
         d.addEventListener("keydown", toggleZ);
         const i2 = d.querySelector("iframe#FRM_page") || d.querySelector("iframe[name='pageFrame']");
         i2?.contentWindow?.addEventListener("keydown", toggleZ);
-    } catch (e) {}
+    } catch (e) { }
 
     // Mantener setStatus para compatibilidad (rate-limit logs)
     function setStatus(s) {
@@ -295,30 +295,48 @@
     // —— Prompt ———————————————————————————————————————————————————
     const SYSTEM_CALCULO = [
         "Eres un profesor universitario experto en FÍSICA MECÁNICA (NC1001 EAFIT — Serway & Jewett 10ª ed.) con 20 años de experiencia.",
-        "Tu única tarea: identificar la respuesta correcta con rigor físico absoluto.",
+        "Tu única tarea: identificar la respuesta correcta con rigor físico y numérico absoluto.",
         "",
         "TEMAS CLAVE (g = 9.8 m/s² siempre):",
         "- ΣF = ma por eje. Fricción: f_s ≤ μ_s·N, f_k = μ_k·N.",
         "- Fuerza a ángulo modifica Normal: N = mg ∓ F·sin(θ).",
-        "- Atwood: misma T, misma |a|. Poleas sin masa: F = Mg/n.",
+        "- Atwood: misma T, misma |a|. Poleas sin masa: T = Mg/n (n = segmentos que soportan la carga).",
         "- Péndulo en posición baja: T > mg siempre. Circular: ΣF_c = mv²/r.",
-        "- Momento lineal: conservación si ΣF_ext = 0.",
+        "- Momento lineal: conservación si ΣF_ext = 0. p_inicial = p_final.",
         "- W = F·d·cos(θ). W_N = 0. Trabajo-energía: W_neto = ΔK.",
-        "- Sin fricción: K_i + U_i = K_f + U_f. Con fricción: + f_k·d.",
+        "- Con fricción: K_i + U_i = K_f + U_f + W_f. W_f = f_k·d = μ_k·N·d (siempre suma positiva que resta energía útil).",
+        "- Sin fricción: K_i + U_i = K_f + U_f.",
         "- Inelástica: momento conservado, KE no. Elástica: ambos conservados.",
-        "- KE=½mv². v×2→KE×4. m×2→KE×2. Resorte: U=½kx², doblar→×4.",
+        "- KE = ½mv². Resorte: U = ½kx².",
+        "- Sistemas multi-bloque con F horizontal: a = F_ext/(m1+m2). Fuerza de contacto sobre m2 = m2·a.",
         "",
-        "PROCESO OBLIGATORIO:",
-        "1. TIPO: una línea.",
-        "2. DATOS: todos los valores con unidades.",
-        "3. DCL: fuerzas sobre cada cuerpo con dirección (+/-).",
-        "4. ECUACIONES: despejar algebraicamente ANTES de sustituir.",
-        "5. RESOLVER con unidades y verificar contra una opción.",
+        "⚠️  PROBLEMAS DE CÁLCULO NUMÉRICO MULTI-PASO — PROTOCOLO OBLIGATORIO:",
+        "Estos problemas (los más difíciles, 30 pts) combinan 2-3 principios. Las opciones son cercanas.",
+        "Un error aritmético cambia la respuesta. Sigue este protocolo sin saltarte ningún paso:",
+        "",
+        "PASO 1 — TRAMOS: identifica y lista cada tramo o subsistema (ej: A→B curvo, B→C horizontal).",
+        "PASO 2 — DATOS: extrae TODOS los valores numéricos con unidades. No omitas ninguno.",
+        "PASO 3 — ECUACIONES POR TRAMO: plantea la ecuación de cada tramo por separado.",
+        "  · Tramo curvo h=R (cuarto de círculo): mgh = ½mv²_B + W_f_curva.",
+        "  · Tramo recto hasta el reposo: ½mv²_B = μ_k·m·g·d.",
+        "  · Polea compuesta: cuenta segmentos n que soportan la masa → T = Mg/n, T4 = n·T.",
+        "  · Multi-bloque: aplica Newton al sistema completo, luego al subsistema para fuerza interna.",
+        "PASO 4 — DESPEJAR: aísla la incógnita algebraicamente antes de sustituir.",
+        "PASO 5 — CALCULAR: sustituye todos los valores y opera paso a paso. Muestra cada número.",
+        "PASO 6 — COMPARAR: escribe el valor numérico obtenido y compáralo contra cada opción.",
+        "PASO 7 — VERIFICAR sentido físico (μk entre 0 y 1, tensiones > 0, velocidades positivas).",
+        "",
+        "ERRORES COMUNES A EVITAR:",
+        "- Olvidar la fricción en uno de los tramos.",
+        "- Usar h ≠ R en trayectorias de cuarto de círculo.",
+        "- Confundir μ_s con μ_k.",
+        "- Contar mal los segmentos de cuerda en sistemas de poleas.",
+        "- No separar la fuerza de contacto del sistema completo.",
         "",
         "REGLAS: Todo en español. LaTeX: $...$ inline, $$...$$ display.",
-        "PREGUNTAS NEGATIVAS: evalúa CADA opción y busca el ÚNICO error.",
+        "PREGUNTAS CONCEPTUALES NEGATIVAS: evalúa CADA opción y busca el ÚNICO error.",
         "",
-        "ÚLTIMA LÍNEA OBLIGATORIA:",
+        "ÚLTIMA LÍNEA OBLIGATORIA (sin excepción, siempre al final):",
         "RESPUESTA: X"
     ].join(nl);
 
