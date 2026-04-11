@@ -198,7 +198,7 @@
         wrapper.innerHTML = `
             <div style="display:flex;justify-content:space-between;font-size:9px;margin-bottom:2px;">
                 <span id="modo-${id}" style="opacity:0.5;">...</span>
-                <span id="letra-${id}" style="font-weight:bold; font-size:14px; color:#ffffff; opacity:1;">?</span>
+                <span id="letra-${id}" style="font-weight:bold; font-size:24px; color:#00ff88; opacity:1; text-shadow: 1px 1px 2px #000;">?</span>
             </div>
             <div id="proc-${id}" style="max-height:100px;overflow-y:auto;line-height:1.2;">...</div>
         `;
