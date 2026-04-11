@@ -96,64 +96,40 @@ FORMATO OBLIGATORIO:
         };
 
         const realizarPeticion = async (modeloParam) => {
-            const INTENTOS = 3; // manda 3 veces, gana la más votada
-            const votos = {};
-            const resultados = {};
-
-            for (let intento = 0; intento < INTENTOS; intento++) {
-                for (let i = 0; i < GROQ_KEYS.length * 2; i++) {
-                    const currentKey = GROQ_KEYS[currentKeyIndex];
-                    try {
-                        const r = await fetch(GROQ_URL, {
-                            method: "POST",
-                            headers: { "Authorization": "Bearer " + currentKey, "Content-Type": "application/json" },
-                            body: JSON.stringify(generarPayload(modeloParam))
-                        });
-                        if (r.status === 429) {
-                            currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                            await new Promise(res => setTimeout(res, 1500));
-                            continue;
-                        }
-                        if (!r.ok) throw new Error("API Error " + r.status);
-                        const data = await r.json();
-                        const raw = data.choices[0].message.content;
-                        const lineas = raw.split(nl).map(l => l.trim()).filter(l => l.length > 0);
-                        const ultimaLinea = lineas[lineas.length - 1];
-                        const letra = ultimaLinea.replace(/[^A-E]/g, "").trim() || "A";
-
-                        votos[letra] = (votos[letra] || 0) + 1;
-                        if (!resultados[letra]) resultados[letra] = raw; // guardar primer procedimiento de esa letra
-
-                        console.log(`[Solver] Intento ${intento + 1}/${INTENTOS}: votó ${letra} (marcador: ${JSON.stringify(votos)})`);
-                        break; // este intento fue exitoso, pasar al siguiente
-                    } catch (err) {
-                        if (i === GROQ_KEYS.length * 2 - 1) throw err;
+            for (let i = 0; i < GROQ_KEYS.length * 2; i++) {
+                const currentKey = GROQ_KEYS[currentKeyIndex];
+                try {
+                    const r = await fetch(GROQ_URL, {
+                        method: "POST",
+                        headers: { "Authorization": "Bearer " + currentKey, "Content-Type": "application/json" },
+                        body: JSON.stringify(generarPayload(modeloParam))
+                    });
+                    if (r.status === 429) {
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                        await new Promise(res => setTimeout(res, 1000));
+                        await new Promise(res => setTimeout(res, 2000));
+                        continue;
                     }
-                }
+                    if (!r.ok) throw new Error("API Error " + r.status);
+                    const data = await r.json();
+                    const raw = data.choices[0].message.content;
+                    // Buscar letra después del separador ---
+                    const partes = raw.split("---");
+                    const despuesDeSeparador = partes[partes.length - 1];
+                    const lineas = despuesDeSeparador.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+                    const letra = (lineas[0] || "").replace(/[^A-E]/g, "").trim() || "A";
 
-                // delay entre intentos para no saturar TPM
-                if (intento < INTENTOS - 1) {
-                    await new Promise(res => setTimeout(res, 3000));
+                    // Mantener UI discreta: filtrar solo ecuaciones
+                    const procLines = partes[0].trim().split(nl);
+                    let formulaLines = procLines.filter(l => l.includes("$$") || l.includes("$") || l.includes("="));
+                    if (formulaLines.length === 0) formulaLines = procLines;
+
+                    return { procedimiento: formulaLines.join("<br>").replace(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (m) => formulaAImagen(m)), letra, modelo: modeloParam };
+                } catch (err) {
+                    if (i === GROQ_KEYS.length * 2 - 1) throw err;
+                    currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
+                    await new Promise(res => setTimeout(res, 1000));
                 }
             }
-
-            // ganador por mayoría
-            const letraGanadora = Object.entries(votos).sort((a, b) => b[1] - a[1])[0][0];
-            const rawGanador = resultados[letraGanadora];
-            console.log(`[Solver] Resultado final por votación: ${letraGanadora} (votos: ${JSON.stringify(votos)})`);
-
-            // Extraer solo ecuaciones para la UI discreta
-            const procLines = rawGanador.split("---")[0].trim().split(nl);
-            let formulaLines = procLines.filter(l => l.includes("$$") || l.includes("$") || l.includes("="));
-            if (formulaLines.length === 0) formulaLines = procLines; // Backup
-
-            return {
-                procedimiento: formulaLines.join("<br>").replace(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g, (m) => formulaAImagen(m)),
-                letra: letraGanadora,
-                modelo: modeloParam
-            };
         };
 
         try {
@@ -197,29 +173,28 @@ FORMATO OBLIGATORIO:
                 if (!el) return "";
                 const sr = el.shadowRoot;
                 if (!sr) return el.innerText.trim().slice(0, 500);
-
-                // El contenido está en el primer DIV del shadowRoot
                 const div = sr.querySelector("div");
                 if (!div) return sr.textContent.replace(/\s{2,}/g, " ").trim().slice(0, 500);
-
-                // Reemplazar cada mjx-container por su mjx-assistive-mml
                 const clone = div.cloneNode(true);
                 clone.querySelectorAll("mjx-container").forEach(mjx => {
                     const mml = mjx.querySelector("mjx-assistive-mml");
-                    const txt = document.createTextNode(mml ? " " + mml.textContent + " " : "");
-                    mjx.replaceWith(txt);
+                    mjx.replaceWith(document.createTextNode(mml ? " " + mml.textContent + " " : ""));
                 });
-                // Eliminar estilos residuales
                 clone.querySelectorAll("style").forEach(s => s.remove());
-
                 return clone.textContent.replace(/\s{2,}/g, " ").trim().slice(0, 500);
             }
 
+            function buscarEnunciado(blocks) {
+                if (blocks.length === 0) return null;
+                const texto = leerBloque(blocks[blocks.length - 1]);
+                return texto.length > 10 ? texto : null;
+            }
+
             const todosLosBlockes = q.ownerDocument.querySelectorAll("d2l-html-block");
-            const blocksAntes = Array.from(todosLosBlockes).filter(b => {
-                return q.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_PRECEDING;
-            });
-            const enunciado = leerBloque(blocksAntes[blocksAntes.length - 1]) || "Sin enunciado";
+            const blocksAntes = Array.from(todosLosBlockes).filter(b =>
+                q.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_PRECEDING
+            );
+            const enunciado = buscarEnunciado(blocksAntes) || "Sin enunciado";
 
             const opts = Array.from(q.querySelectorAll("tr.d2l-rowshadeonhover")).map((tr, i) => ({
                 letra: String.fromCharCode(65 + i),
