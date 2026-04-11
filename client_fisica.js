@@ -210,7 +210,7 @@
 
     // —— API con rotación de keys ————————————————————————————————
     async function preguntarAI(enunciado, opciones, imagen) {
-        const optsStr = opciones.map(o => o.letra + ") " + o.texto).join(nl);
+        const optsStr = opciones.map(o => o.letra + ") " + (o.htmlRaw || o.texto)).join(nl);
         const model = imagen ? MODEL_VISION : MODEL_TEXTO;
 
         const construirPayload = (modeloParam) => {
@@ -243,7 +243,7 @@
                     });
                     if (r.status === 429) {
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                        const wait = 25 + i * 15;
+                        const wait = 5; // Solo 5s al rotar key, el tiempo largo es para cuando se agotan todas
                         console.log("[Solver] Rate limit — rotando key, esperando " + wait + "s...");
                         await new Promise(res => setTimeout(res, wait * 1000));
                         continue;

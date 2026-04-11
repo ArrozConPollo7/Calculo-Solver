@@ -201,7 +201,7 @@
 
     // —— API con rotación de keys ————————————————————————————————
     async function preguntarAI(enunciado, opciones, imagen) {
-        const optsStr = opciones.map(o => o.letra + ") " + o.texto).join(nl);
+        const optsStr = opciones.map(o => o.letra + ") " + (o.htmlRaw || o.texto)).join(nl);
         const model = imagen ? MODEL_VISION : MODEL_TEXTO;
 
         const construirPayload = (modeloParam) => {
@@ -234,7 +234,7 @@
                     });
                     if (r.status === 429) {
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                        const wait = 25 + i * 15;
+                        const wait = 5; // Solo 5s al rotar key, el tiempo largo es para cuando se agotan todas
                         console.log("[Solver] Rate limit — rotando key, esperando " + wait + "s...");
                         await new Promise(res => setTimeout(res, wait * 1000));
                         continue;
@@ -343,7 +343,7 @@
         const opts = [];
         fs.querySelectorAll("tr.d2l-rowshadeonhover").forEach((r, i) => {
             const b = r.querySelector("d2l-html-block");
-            opts.push({ row: r, letra: "ABCDE"[i], texto: htmlToText(b?.getAttribute("html")) });
+            opts.push({ row: r, letra: "ABCDE"[i], texto: htmlToText(b?.getAttribute("html")), htmlRaw: b?.getAttribute("html") || "" });
         });
         const b = buscarEnunciado(fs);
         questions.push({ tipo: "parcial", elemento: fs, opts, b });
@@ -360,7 +360,7 @@
             c.querySelectorAll("tr").forEach((r) => {
                 const radio = r.querySelector("input[type=radio]");
                 const block = r.querySelector("d2l-html-block");
-                if (radio && block) opts.push({ row: r, letra: "ABCDE"[opts.length], texto: htmlToText(block.getAttribute("html")) });
+                if (radio && block) opts.push({ row: r, letra: "ABCDE"[opts.length], texto: htmlToText(block.getAttribute("html")), htmlRaw: block.getAttribute("html") || "" });
             });
             questions.push({ tipo: "quiz", elemento: c, opts, b });
         });
