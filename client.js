@@ -219,18 +219,32 @@
             function leerBloque(el) {
                 if (!el) return "";
                 const sr = el.shadowRoot;
-                const texto = sr ? sr.textContent : el.innerText;
-                return texto
-                    .replace(/mjx-[a-z-]+\s*\{[^}]*\}/g, "")      // clases mjx-xxx { ... }
-                    .replace(/_::[^\{]+\{[^}]*\}/g, "")             // _::-webkit-... { ... }
-                    .replace(/:root[^\{]+\{[^}]*\}/g, "")           // :root ... { ... }
-                    .replace(/\{[^}]*display[^}]*\}/g, "")          // cualquier { display: ... }
-                    .replace(/position:\s*absolute[^;]*;/g, "")     // position: absolute
-                    .replace(/clip:\s*rect[^;]*;/g, "")             // clip: rect(...)
-                    .replace(/padding:\s*[\dpx\s]+;/g, "")          // padding: ...
-                    .replace(/\s{2,}/g, " ")
-                    .trim()
-                    .slice(0, 500);
+                if (!sr) return el.innerText.trim().slice(0, 500);
+
+                let resultado = "";
+                const walker = sr.ownerDocument.createTreeWalker(
+                    sr,
+                    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+                    {
+                        acceptNode(node) {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                const tag = node.tagName.toLowerCase();
+                                if (tag === "style" || tag === "script") return NodeFilter.FILTER_REJECT;
+                                if (tag === "mjx-assistive-mml") return NodeFilter.FILTER_ACCEPT;
+                                if (tag.startsWith("mjx-")) return NodeFilter.FILTER_REJECT;
+                                return NodeFilter.FILTER_SKIP;
+                            }
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                    }
+                );
+
+                let node;
+                while (node = walker.nextNode()) {
+                    const t = node.textContent.trim();
+                    if (t) resultado += t + " ";
+                }
+                return resultado.replace(/\s{2,}/g, " ").trim().slice(0, 500);
             }
 
             const todosLosBlockes = q.ownerDocument.querySelectorAll("d2l-html-block");
