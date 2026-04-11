@@ -220,7 +220,7 @@
                     { role: "system", content: SYSTEM_CALCULO },
                     { role: "user", content: "Analiza exhaustivamente la pregunta y determina el enunciado real.\nPREGUNTA:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
                 ],
-                max_tokens: imagen ? 4096 : 8000,
+                max_tokens: imagen ? 4096 : 4000,
                 temperature: 0.1
             };
             if (imagen) {
@@ -244,12 +244,28 @@
                     if (r.status === 429) {
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
                         const wait = 25 + i * 15;
-                        console.log("[Solver Física] Rate limit — rotando key, esperando " + wait + "s...");
+                        console.log("[Solver] Rate limit — rotando key, esperando " + wait + "s...");
                         await new Promise(res => setTimeout(res, wait * 1000));
                         continue;
                     }
+                    if (r.status === 413) {
+                        // Payload muy grande — reducir max_tokens y reintentar
+                        console.warn("[Solver] 413 Payload too large — reduciendo tokens...");
+                        construirPayload = (modeloParam) => {
+                            const p = {
+                                model: modeloParam,
+                                messages: [
+                                    { role: "system", content: SYSTEM_CALCULO },
+                                    { role: "user", content: "Resuelve:\n" + enunciado.slice(0, 500) + nl + nl + "OPCIONES:\n" + optsStr }
+                                ],
+                                max_tokens: 2000,
+                                temperature: 0.1
+                            };
+                            return p;
+                        };
+                        continue;
+                    }
                     if (!r.ok) throw new Error("Groq API Error: " + r.status);
-                    return await r.json();
                 } catch (err) {
                     if (i === GROQ_KEYS.length * 3 - 1) throw err;
                     currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
