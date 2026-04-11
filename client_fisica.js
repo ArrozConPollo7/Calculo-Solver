@@ -98,29 +98,33 @@
 
     // —— UI — panel de justificación ——————————————————————————————
     function setupPanelClick(fieldset, panel, quizDoc) {
-        // Subir desde el fieldset hasta encontrar el ancestro común con el H2
-        let anc = fieldset.parentElement;
-        for (let n = 0; n < 5; n++) {
-            if (!anc) break;
-            const h2 = anc.querySelector("h2.dhdg_2, h2[class*='dhdg'], h3[class*='dhdg']");
-            if (h2) {
-                h2.style.cursor = "pointer";
-                h2.style.userSelect = "none";
-                h2.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    const isOpen = panel.style.display === "block";
-                    // Cerrar todos los paneles
-                    quizDoc.querySelectorAll(".__groq_panel__")
-                        .forEach(p => p.style.display = "none");
-                    // Abrir este si estaba cerrado
-                    if (!isOpen) {
-                        panel.style.display = "block";
-                        setTimeout(() => renderKaTeX(panel, quizDoc), 80);
-                    }
-                });
-                return h2;
+        // Subir desde el fieldset buscando el H2 en cada nivel padre
+        let node = fieldset;
+        for (let n = 0; n < 8; n++) {
+            node = node.parentElement;
+            if (!node || node === quizDoc.body) break;
+            // Buscar H2 que sea hermano ANTERIOR dentro de este contenedor
+            const siblings = Array.from(node.parentElement?.children || []);
+            const nodeIdx = siblings.indexOf(node);
+            for (let s = nodeIdx - 1; s >= 0; s--) {
+                const h2 = siblings[s].tagName === "H2"
+                    ? siblings[s]
+                    : siblings[s].querySelector?.("h2.dhdg_2");
+                if (h2) {
+                    h2.style.cursor = "pointer";
+                    h2.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        const isOpen = panel.style.display === "block";
+                        quizDoc.querySelectorAll(".__groq_panel__")
+                            .forEach(p => p.style.display = "none");
+                        if (!isOpen) {
+                            panel.style.display = "block";
+                            setTimeout(() => renderKaTeX(panel, quizDoc), 80);
+                        }
+                    });
+                    return h2;
+                }
             }
-            anc = anc.parentElement;
         }
     }
 
@@ -161,21 +165,23 @@
     }
 
     function actualizarLegend(fieldset, estado, letra) {
-        let anc = fieldset.parentElement;
-        for (let n = 0; n < 5; n++) {
-            if (!anc) break;
-            const h2 = anc.querySelector("h2.dhdg_2, h2[class*='dhdg']");
-            if (h2) {
-                if (estado === "ok") {
-                    h2.style.color = "#16a34a";
-                    h2.title = "✓ " + letra + " — Click para ver justificación";
-                } else {
-                    h2.style.color = "#dc2626";
-                    h2.title = "Error — Click para ver detalle";
+        let node = fieldset;
+        for (let n = 0; n < 8; n++) {
+            node = node.parentElement;
+            if (!node || node === document.body) break;
+            const siblings = Array.from(node.parentElement?.children || []);
+            const nodeIdx = siblings.indexOf(node);
+            for (let s = nodeIdx - 1; s >= 0; s--) {
+                const h2 = siblings[s].tagName === "H2"
+                    ? siblings[s]
+                    : siblings[s].querySelector?.("h2.dhdg_2");
+                if (h2) {
+                    h2.title = estado === "ok"
+                        ? "✓ " + letra + " — Click para ver justificación"
+                        : "Error — Click para ver detalle";
+                    return;
                 }
-                return;
             }
-            anc = anc.parentElement;
         }
     }
 
