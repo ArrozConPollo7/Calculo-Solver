@@ -112,14 +112,15 @@ FORMATO OBLIGATORIO:
                     if (!r.ok) throw new Error("API Error " + r.status);
                     const data = await r.json();
                     const raw = data.choices[0].message.content;
-                    // Buscar letra después del separador ---
-                    const partes = raw.split("---");
-                    const despuesDeSeparador = partes[partes.length - 1];
-                    const lineas = despuesDeSeparador.split("\n").map(l => l.trim()).filter(l => l.length > 0);
-                    const letra = (lineas[0] || "").replace(/[^A-E]/g, "").trim() || "A";
+                    // Tomar última línea no vacía del response
+                    const lineas = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+                    const ultimaLinea = lineas[lineas.length - 1];
+                    // La letra es un solo carácter A-E al inicio o al final de la última línea
+                    const letraMatch = ultimaLinea.match(/^([A-E])[^A-Z]|^([A-E])$|([A-E])$/);
+                    const letra = (letraMatch?.[1] || letraMatch?.[2] || letraMatch?.[3] || "A");
 
                     // Mantener UI discreta: filtrar solo ecuaciones
-                    const procLines = partes[0].trim().split(nl);
+                    const procLines = raw.split("---")[0].trim().split(nl);
                     let formulaLines = procLines.filter(l => l.includes("$$") || l.includes("$") || l.includes("="));
                     if (formulaLines.length === 0) formulaLines = procLines;
 
