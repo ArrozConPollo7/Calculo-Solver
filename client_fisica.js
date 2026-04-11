@@ -15,21 +15,86 @@
     const nl = String.fromCharCode(10);
     const slash = String.fromCharCode(92);
 
-    // —— Círculo de estado — va en window.top para salir de iframes ——
-    let statusDot = window.top.document.getElementById("__groq_dot__");
-    if (!statusDot) {
-        statusDot = window.top.document.createElement("div");
-        statusDot.id = "__groq_dot__";
-        window.top.document.body.appendChild(statusDot);
+    // —— Indicador disimulado POR PREGUNTA — puntos de color junto a cada pregunta ——
+    // Estados: "detect" (gris), "loading" (naranja), "done" (verde), "error" (rojo)
+    function crearIndicador(elementoRef, targetDoc) {
+        const dot = targetDoc.createElement("span");
+        dot.className = "__groq_dot__";
+        dot.style.cssText = [
+            "display:inline-block",
+            "width:7px",
+            "height:7px",
+            "border-radius:50%",
+            "background:#888",
+            "opacity:0.3",
+            "margin-left:6px",
+            "vertical-align:middle",
+            "transition:background 0.4s,opacity 0.4s",
+            "position:relative",
+            "top:-1px"
+        ].join(";");
+        try {
+            const parent = elementoRef.parentElement;
+            if (parent) parent.style.position = "relative";
+            const firstChild = elementoRef.firstChild;
+            if (firstChild) {
+                elementoRef.insertBefore(dot, firstChild.nextSibling || firstChild);
+            } else {
+                elementoRef.appendChild(dot);
+            }
+        } catch (e) {
+            targetDoc.body.appendChild(dot);
+        }
+        return dot;
     }
-    statusDot.style.cssText = "position:fixed;top:8px;left:8px;width:6px;height:6px;border-radius:50%;background:#00cc44;opacity:0.3;z-index:2147483647;pointer-events:none;transition:all 0.4s;";
 
-    function setStatus(s) {
-        const c = { green: "#00cc44", yellow: "#ffaa00", red: "#ff3333" };
-        statusDot.style.background = c[s] || c.green;
-        statusDot.style.opacity = s === "green" ? "0.3" : "0.7";
+    function setIndicador(dot, estado) {
+        if (!dot) return;
+        const map = {
+            detect:  { bg: "#9ca3af", op: "0.30" },
+            loading: { bg: "#f59e0b", op: "0.60" },
+            done:    { bg: "#22c55e", op: "0.70" },
+            error:   { bg: "#ef4444", op: "0.55" }
+        };
+        const s = map[estado] || map.detect;
+        dot.style.background = s.bg;
+        dot.style.opacity = s.op;
     }
-    setStatus("green");
+
+    // —— Toggle Z — ocultar/mostrar TODOS los paneles y dots ——
+    window.__groq_panels_visible__ = true;
+    const toggleZ = (e) => {
+        if (e.key.toLowerCase() !== "z") return;
+        const now = Date.now();
+        if (window.__groq_last_z__ && now - window.__groq_last_z__ < 300) return;
+        window.__groq_last_z__ = now;
+        window.__groq_panels_visible__ = !window.__groq_panels_visible__;
+        const visible = window.__groq_panels_visible__;
+        // Ocultar/mostrar paneles en todos los documentos posibles
+        [document, getQuizDoc()].forEach(d => {
+            try {
+                d.querySelectorAll(".__groq_panel__").forEach(p => p.style.display = visible ? "none" : "none");
+                d.querySelectorAll(".__groq_dot__").forEach(dot => dot.style.display = visible ? "inline-block" : "none");
+            } catch(err) {}
+        });
+        // Los paneles se abren al hacer click en h2, solo ocultamos los dots
+        console.log("[Solver] Indicadores " + (visible ? "visibles" : "ocultos"));
+    };
+    window.addEventListener("keydown", toggleZ);
+    try {
+        const i1 = document.getElementById("ctl_2");
+        const d = i1?.contentDocument || document;
+        d.addEventListener("keydown", toggleZ);
+        const i2 = d.querySelector("iframe#FRM_page") || d.querySelector("iframe[name='pageFrame']");
+        i2?.contentWindow?.addEventListener("keydown", toggleZ);
+    } catch (e) {}
+
+    // Mantener setStatus para compatibilidad (rate-limit logs)
+    function setStatus(s) {
+        // Solo log, los indicadores por pregunta manejan el estado visual
+        if (s === "yellow") console.log("[Solver] Rate limit...");
+        if (s === "red") console.warn("[Solver] Error");
+    }
 
     // —— KaTeX — cargado en el iframe de las preguntas ————————————
     async function cargarKaTeX(targetDoc) {
@@ -412,6 +477,12 @@
         const p = questions[i];
         const panel = crearPanel(p.elemento, quizDoc);
 
+        // Indicador por pregunta
+        const dot = crearIndicador(p.elemento, quizDoc);
+        setIndicador(dot, "detect");
+        await new Promise(r => setTimeout(r, 80));
+        setIndicador(dot, "loading");
+
         try {
             const enunciado = htmlToText(p.b?.getAttribute("html") || "");
             const src = await extractImageSrc(p.b)
@@ -423,6 +494,9 @@
             console.log("[Física P" + (i + 1) + "] Opciones:", p.opts.map(o => o.letra + ": " + o.texto.slice(0, 50)));
 
             const res = await preguntarAI(enunciado, p.opts, img);
+
+            // Indicador: respondido
+            setIndicador(dot, "done");
 
             panel.innerHTML = [
                 "<div style='font-size:13px;line-height:1.9;'>",
@@ -439,7 +513,6 @@
 
             actualizarLegend(p.elemento, "ok", res.letra);
             marcar(p, res.letra);
-            setStatus("green");
             console.log("%c✅ P" + (i + 1) + " → " + res.letra, "color:lime;font-weight:bold;");
 
             if (i < questions.length - 1) {
@@ -448,9 +521,9 @@
                 await new Promise(r => setTimeout(r, delay));
             }
         } catch (e) {
+            setIndicador(dot, "error");
             panel.innerHTML = "<span style='color:#dc2626;'>❌ Error: " + e.message + "</span>";
             actualizarLegend(p.elemento, "error", "");
-            setStatus("red");
             console.error("Error en P" + (i + 1), e);
         }
     }
