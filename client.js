@@ -120,37 +120,64 @@
         };
 
         const realizarPeticion = async (modeloParam) => {
-            for (let i = 0; i < GROQ_KEYS.length * 2; i++) {
-                const currentKey = GROQ_KEYS[currentKeyIndex];
-                try {
-                    const r = await fetch(GROQ_URL, {
-                        method: "POST", headers: { "Authorization": "Bearer " + currentKey, "Content-Type": "application/json" },
-                        body: JSON.stringify(generarPayload(modeloParam))
-                    });
-                    if (r.status === 429) {
+            const INTENTOS = 3; // manda 3 veces, gana la más votada
+            const votos = {};
+            const resultados = {};
+
+            for (let intento = 0; intento < INTENTOS; intento++) {
+                for (let i = 0; i < GROQ_KEYS.length * 2; i++) {
+                    const currentKey = GROQ_KEYS[currentKeyIndex];
+                    try {
+                        const r = await fetch(GROQ_URL, {
+                            method: "POST",
+                            headers: { "Authorization": "Bearer " + currentKey, "Content-Type": "application/json" },
+                            body: JSON.stringify(generarPayload(modeloParam))
+                        });
+                        if (r.status === 429) {
+                            currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
+                            await new Promise(res => setTimeout(res, 1500));
+                            continue;
+                        }
+                        if (!r.ok) throw new Error("API Error " + r.status);
+                        const data = await r.json();
+                        const raw = data.choices[0].message.content;
+                        const lineas = raw.split(nl).map(l => l.trim()).filter(l => l.length > 0);
+                        const ultimaLinea = lineas[lineas.length - 1];
+                        const letra = ultimaLinea.replace(/[^A-E]/g, "").trim() || "A";
+
+                        votos[letra] = (votos[letra] || 0) + 1;
+                        if (!resultados[letra]) resultados[letra] = raw; // guardar primer procedimiento de esa letra
+
+                        console.log(`[Solver] Intento ${intento + 1}/${INTENTOS}: votó ${letra} (marcador: ${JSON.stringify(votos)})`);
+                        break; // este intento fue exitoso, pasar al siguiente
+                    } catch (err) {
+                        if (i === GROQ_KEYS.length * 2 - 1) throw err;
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                        await new Promise(res => setTimeout(res, 1500));
-                        continue;
+                        await new Promise(res => setTimeout(res, 1000));
                     }
-                    if (!r.ok) throw new Error("API Error " + r.status);
-                    const data = await r.json();
-                    const raw = data.choices[0].message.content;
-                    const lineas = raw.split(nl).map(l => l.trim()).filter(l => l.length > 0);
-                    const ultimaLinea = lineas[lineas.length - 1];
-                    const letra = ultimaLinea.replace(/[^A-E]/g, "").trim() || "A";
-                    
-                    // Extraer solo ecuaciones para la UI discreta
-                    const procLines = raw.split("---")[0].trim().split(nl);
-                    let formulaLines = procLines.filter(l => l.includes("$$") || l.includes("$") || l.includes("="));
-                    if (formulaLines.length === 0) formulaLines = procLines; // Backup
-                    
-                    return { procedimiento: formulaLines.join("\n"), letra, modelo: modeloParam };
-                } catch (err) {
-                    if (i === GROQ_KEYS.length * 2 - 1) throw err;
-                    currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                    await new Promise(res => setTimeout(res, 1000));
+                }
+
+                // delay entre intentos para no saturar TPM
+                if (intento < INTENTOS - 1) {
+                    await new Promise(res => setTimeout(res, 3000));
                 }
             }
+
+            // ganador por mayoría
+            const letraGanadora = Object.entries(votos).sort((a, b) => b[1] - a[1])[0][0];
+            const rawGanador = resultados[letraGanadora];
+            console.log(`[Solver] Resultado final por votación: ${letraGanadora} (votos: ${JSON.stringify(votos)})`);
+
+            // Extraer solo ecuaciones para la UI discreta
+            const procLines = rawGanador.split("---")[0].trim().split(nl);
+            let formulaLines = procLines.filter(l => l.includes("$$") || l.includes("$") || l.includes("="));
+            if (formulaLines.length === 0) formulaLines = procLines; // Backup
+
+            return {
+                procedimiento: formulaLines.join("\n"),
+                letra: letraGanadora,
+                modelo: modeloParam
+            };
         };
 
         try {
