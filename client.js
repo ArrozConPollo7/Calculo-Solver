@@ -3,7 +3,8 @@
     window.__solverActivo = true;
 
     // ========================================================================
-    // D2L GROQ SOLVER - CÁLCULO II (CM0231 EAFIT)
+    // D2L GROQ SOLVER v26 - CÁLCULO II (CM0231 EAFIT)
+    // Mejoras: stripThinking + rate limit inteligente + KaTeX + RESPUESTA:X
     // ========================================================================
 
     const GROQ_KEYS = ["DEPLOY_REPLACE_ME"];
@@ -17,9 +18,8 @@
     const nl = String.fromCharCode(10);
     const slash = String.fromCharCode(92);
 
-    window.__groq__ = window.__groq__ || { visible: false, justificaciones: [], preguntas: [] };
-    window.__groq__.justificaciones = [];
-    window.__groq__.preguntas = [];
+    window.__groq__ = window.__groq__ || { visible: false };
+    window.__groq__.visible = window.__groq__.visible || false;
 
     if (window.__groq_toggle_fn__) {
         window.removeEventListener("keydown", window.__groq_toggle_fn__);
@@ -31,9 +31,7 @@
             i2?.contentWindow?.removeEventListener("keydown", window.__groq_toggle_fn__);
         } catch (e) { }
     }
-    if (window.__groq_observer__) {
-        window.__groq_observer__.disconnect();
-    }
+    if (window.__groq_observer__) window.__groq_observer__.disconnect();
 
     window.__groq_observer__ = new IntersectionObserver((entries) => {
         entries.forEach(e => {
@@ -44,27 +42,51 @@
         });
     }, { threshold: 0.1 });
 
-    // —— Procesamiento de Texto ————————————————————————————————————
-    function filtrarLineasExplicativas(cuerpo) {
-        const lineas = cuerpo.split(nl);
-        const filtradas = lineas.filter(l => {
-            const t = l.trim();
-            if (t.length === 0) return true;
-            if (t.startsWith("Tema:") || t.startsWith("Procedimiento:") || t.startsWith("Resultado:") || t.startsWith("Verificación:")) return true;
-            if (t.includes("$") || t.includes(slash) || t.includes("=")) return true;
-            return false;
+    // —— KaTeX ————————————————————————————————————————————————————
+    async function cargarKaTeX() {
+        if (window.katex) return;
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css";
+        document.head.appendChild(link);
+        const loadScript = src => new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = src; s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
         });
-        return filtradas.join(nl);
+        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js");
+        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js");
+    }
+
+    function renderKaTeX(div) {
+        if (!window.renderMathInElement) return;
+        try {
+            window.renderMathInElement(div, {
+                delimiters: [
+                    { left: "$$", right: "$$", display: true },
+                    { left: "$", right: "$", display: false },
+                    { left: "\\(", right: "\\)", display: false },
+                    { left: "\\[", right: "\\]", display: true }
+                ],
+                throwOnError: false, strict: false
+            });
+        } catch (e) { }
+    }
+
+    // —— Procesamiento de texto ————————————————————————————————————
+    // FIX 1: stripThinking — elimina bloques <think> de Qwen antes de procesar
+    function stripThinking(raw) {
+        return raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
     }
 
     function limpiarRespuestaModelo(raw) {
+        const clean = stripThinking(raw);
         const separatorRegex = new RegExp("---+");
-        const partes = raw.split(separatorRegex);
+        const partes = clean.split(separatorRegex);
         const letraSeccion = partes[partes.length - 1].trim();
         let cuerpo = partes.length >= 2
             ? partes.slice(0, -1).join("---").trim()
-            : raw.trim();
-        cuerpo = filtrarLineasExplicativas(cuerpo);
+            : clean.trim();
         return { justificacion: cuerpo, letraSeccion };
     }
 
@@ -72,17 +94,6 @@
         texto = texto
             .split(slash + "(").join("$").split(slash + ")").join("$")
             .split(slash + "[").join("$$").split(slash + "]").join("$$");
-
-        texto = texto.replace(new RegExp("\\$\\$([\\s\\S]*?)\\$\\$", "g"), (m, p1) => {
-            let formula = p1.trim().replace(new RegExp("^[\\s]*" + slash + "displaystyle"), "").trim();
-            const url = "https://latex.codecogs.com/svg.latex?" + slash + "displaystyle&space;" + encodeURIComponent(formula);
-            return "<div style='text-align:center;margin:4px 0;'><img src='" + url + "' alt='math' style='max-width:100%;'></div>";
-        });
-        texto = texto.replace(new RegExp("\\$([^\\$]+)\\$", "g"), (m, p1) => {
-            const url = "https://latex.codecogs.com/svg.latex?" + slash + "inline&space;" + encodeURIComponent(p1.trim());
-            return "<img src='" + url + "' alt='math' style='transform:translateY(3px);max-width:100%;'>";
-        });
-
         return texto.split(nl).map(l => {
             return l.replace(new RegExp("[*][*]([^*]+)[*][*]", "g"), "<strong>$1</strong>");
         }).join("<br>");
@@ -92,7 +103,7 @@
     function crearDivJustificacion(p) {
         const el = document.createElement("div");
         el.className = "__groq_justification_div";
-        el.style.cssText = "display:none;width:100%;max-height:80px;overflow-y:auto;background:transparent;border-top:1px solid rgba(0,0,0,0.07);font-size:11px;padding:4px 0;margin-bottom:8px;font-family:system-ui,sans-serif;color:#333;line-height:1.4;";
+        el.style.cssText = "display:none;width:100%;max-height:160px;overflow-y:auto;background:transparent;border-top:1px solid rgba(0,0,0,0.07);font-size:11.5px;padding:8px 0;margin-bottom:12px;font-family:system-ui,sans-serif;color:#333;line-height:1.6;";
         const target = p.elemento;
         if (target.nextSibling) {
             target.parentElement.insertBefore(el, target.nextSibling);
@@ -160,6 +171,7 @@
     }
 
     // —— Prompt Cálculo II ————————————————————————————————————————
+    // FIX 4: Cambiado a "RESPUESTA: X" — más confiable que --- + letra
     const SYSTEM_CALCULO = [
         "Eres un matemático experto resolviendo parciales de Cálculo II, estrictamente apegado al texto de Stewart 8a edición. Tu precisión matemática es infalible.",
         "ESTO ES CÁLCULO PURO, NO ESTADÍSTICA. No estás buscando funciones de densidad de probabilidad (PDF), estás buscando ÁREAS GEOMÉTRICAS literales.",
@@ -175,31 +187,56 @@
         "",
         "REGLAS SUPREMAS:",
         "1. EL OBJETIVO DETERMINA EL PROCEDIMIENTO: MIRA LAS OPCIONES ANTES de operar a ciegas. ¿Las opciones son valores numéricos decimales? Resuelve hasta el final. ¿Las opciones son INTEGRALES SIN RESOLVER (fórmulas)? Entonces TU ÚNICO TRABAJO ES PLANTEAR, NO LA RESUELVAS.",
-        "2. PLANTEAMIENTOS DE ÁREA (CÁLCULO PURO, NO ESTADÍSTICA): El área geométrica bajo la curva $f(x)$ es estrictamente $\\int_a^b f(x) dx$. NUNCA multipliques la función por derivadas internas ni agregues coeficientes 0.5 o constantes mágicas para fabricar un 'área=1' (no confundas cálculo con distribuciones exponenciales de probabilidad). Calca la función literalmente en la integral.",
-        "3. NO INVENTES problemas. Si te dan una gráfica o enunciado en una imagen, esa es la verdad absoluta. Si el texto falla, confía en la imagen.",
-        "4. JAMÁS DIGAS 'Ninguna opción coincide'. Si tu resultado preliminar no se ve igual a las opciones, APLICA ÁLGEBRA o cambia la variable para empatar lógicamente con una de las opciones.",
-        "5. Superficie de Revolución:",
-        "   - Giro eje Y: El radio es $x$ (o $g(y)$). Área $dA = 2\\pi x \\, ds$.",
-        "   - Giro eje X: El radio es $y$ (o $f(x)$). Área $dA = 2\\pi y \\, ds$.",
-        "   - ¡Cuidado con sustituciones $u$! Si $u=e^x$, los límites también cambian.",
-        "6. Tópicos Avanzados (MUY IMPORTANTE):",
-        "   - Integrales Impropias: ¡ALERTA DE SIGNOS! Analiza algebraicamente a dónde tiende el exponente. Ej: $e^{-(-\\infty)} = e^{\\infty} = \\infty$ (DIVERGE).",
-        "   - Series y Convergencia: Declara EXACTAMENTE qué prueba estás usando y demuéstrala.",
-        "   - Polinomios de Taylor: Asegúrate de revisar alrededor de qué centro $a$ está calculado.",
-        "7. CUIDADO CON PREGUNTAS NEGATIVAS: Si el enunciado dice 'NO corresponde', 'FALSA', o 'INCORRECTA', tu objetivo se INVIERTE. Debes evaluar todas las opciones y encontrar la ÚNICA que tiene un ERROR matemático (ej. un signo menos faltante, un límite mal evaluado). Tres serán correctas, una será un error explícito. ¡Atrapa la que está MAL!",
-        "8. ESTRICTAMENTE PROCEDIMIENTOS. No uses relleno de texto.",
+        "2. PLANTEAMIENTOS DE ÁREA: El área geométrica bajo la curva $f(x)$ es estrictamente $\\int_a^b f(x) dx$. NUNCA multipliques por derivadas internas ni agregues coeficientes mágicos.",
+        "3. NO INVENTES problemas. Si hay imagen, esa es la verdad absoluta.",
+        "4. JAMÁS DIGAS 'Ninguna opción coincide'. APLICA ÁLGEBRA para empatar con una opción.",
+        "5. Superficie de Revolución: Giro eje Y: $dA = 2\\pi x\\,ds$. Giro eje X: $dA = 2\\pi y\\,ds$.",
+        "6. Integrales Impropias: ALERTA DE SIGNOS. Analiza algebraicamente a dónde tiende el exponente.",
+        "7. Series: Declara EXACTAMENTE qué prueba usas y demuéstrala.",
+        "8. PREGUNTAS NEGATIVAS: 'NO corresponde', 'FALSA', 'INCORRECTA' → busca el ÚNICO error matemático.",
         "",
-        "ESTRUCTURA INQUEBRANTABLE:",
-        "Tema: (Concepto teórico evaluado)",
-        "Procedimiento: (Paso 1: Planteamiento de la base teórica. Paso 2: Derivación y cuadrados. Paso 3: Aplicación de cambios de variable para forzar el empate lógico con las opciones. Usa exclusivamente código LaTeX conectado por iguales.)",
-        "Resultado: (Formulación final numérica o integral sin resolver)",
-        "Verificación: (Demostración rigurosa de por qué una de las opciones es un espejo exacto del Resultado)",
-        "---",
-        "LETRA",
-        "(La última línea obligatoriamente tiene SOLO UNA LETRA que indique la opción verdadera: A, B, C, D o E)"
+        "ESTRUCTURA:",
+        "Tema: (sección de Stewart)",
+        "Procedimiento: (pasos con LaTeX $...$)",
+        "Resultado: (valor o expresión final)",
+        "Verificación: (por qué coincide con la opción)",
+        "",
+        "OBLIGATORIO: La última línea de tu respuesta debe ser EXACTAMENTE:",
+        "RESPUESTA: X",
+        "(donde X es A, B, C, D o E — sin más texto en esa línea)"
     ].join(nl);
 
-    // —— API con rotación de keys ————————————————————————————————
+    // —— Extracción robusta de letra ——————————————————————————————
+    function extraerLetra(raw) {
+        const clean = stripThinking(raw);
+        const lines = clean.split(/[\r\n]+/);
+
+        // 1. Buscar "RESPUESTA: X" — método principal (FIX 4)
+        const respTag = clean.match(/RESPUESTA\s*:\s*([A-E])/i);
+        if (respTag) return respTag[1].toUpperCase();
+
+        // 2. Separador --- seguido de letra sola
+        const sepIdx = lines.map(l => l.trim()).lastIndexOf("---");
+        if (sepIdx !== -1) {
+            const after = lines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
+            if (after.length > 0 && /^[A-E]$/.test(after[0])) return after[0];
+        }
+
+        // 3. Última línea exactamente una letra
+        for (let i = lines.length - 1; i >= 0; i--) {
+            const l = lines[i].trim();
+            if (/^[A-E]$/.test(l)) return l;
+        }
+
+        // 4. Frase explícita en últimas 300 chars
+        const tail = clean.slice(-300);
+        const m = tail.match(/(?:respuesta|opci[oó]n|letra)[^A-Za-z]*([A-E])(?:[^A-Za-z]|$)/i);
+        if (m) return m[1].toUpperCase();
+
+        return "A";
+    }
+
+    // —— API con rotación de keys y rate limit inteligente ————————
     async function preguntarAI(enunciado, opciones, imagen) {
         const optsStr = opciones.map(o => o.letra + ") " + (o.htmlRaw || o.texto)).join(nl);
         const model = imagen ? MODEL_VISION : MODEL_TEXTO;
@@ -209,20 +246,22 @@
                 model: modeloParam,
                 messages: [
                     { role: "system", content: SYSTEM_CALCULO },
-                    { role: "user", content: "Analiza exhaustivamente la pregunta y determina el enunciado real.\nPREGUNTA:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
+                    { role: "user", content: "Analiza la pregunta y responde.\nPREGUNTA:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
                 ],
-                max_tokens: imagen ? 4096 : 4000,
+                max_tokens: 3000,
                 temperature: 0.1
             };
             if (imagen) {
                 p.messages[1].content = [
-                    { type: "text", text: "Lee el enunciado y analiza cuidadosamente la imagen, la cual contiene la fórmula o gráfica vital de la pregunta. Responde a lo que se te pide en base a esa imagen.\n\nENUNCIADO:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr },
+                    { type: "text", text: "Lee el enunciado y analiza la imagen.\n\nENUNCIADO:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr },
                     { type: "image_url", image_url: { url: "data:" + imagen.mimeType + ";base64," + imagen.base64 } }
                 ];
+                p.max_tokens = 2000;
             }
             return p;
         };
 
+        // FIX 2: Rate limit inteligente — lee segundos exactos de Groq
         const hacerPeticion = async (modeloParam) => {
             for (let i = 0; i < GROQ_KEYS.length * 3; i++) {
                 const key = GROQ_KEYS[currentKeyIndex];
@@ -233,20 +272,21 @@
                         body: JSON.stringify(construirPayload(modeloParam))
                     });
                     if (r.status === 429) {
+                        const txt = await r.text();
+                        const m = txt.match(/try again in ([\d.]+)s/);
+                        const w = m ? Math.ceil(parseFloat(m[1])) + 2 : 20;
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                        console.log("[Solver] Rate limit — rotando key, esperando 5s...");
-                        await new Promise(res => setTimeout(res, 5000));
+                        console.log("[Solver] Rate limit — rotando key, esperando " + w + "s...");
+                        await new Promise(res => setTimeout(res, w * 1000));
                         continue;
                     }
-                    if (r.status === 413) {
-                        console.warn("[Solver] 413 payload muy grande — abortando");
-                        throw new Error("Payload too large (413)");
-                    }
+                    if (r.status === 413) throw new Error("Payload too large (413)");
                     if (!r.ok) throw new Error("API Error " + r.status);
                     const data = await r.json();
                     if (!data?.choices?.[0]?.message?.content) throw new Error("Respuesta vacía");
-                    return data; // ← único return exitoso
+                    return data;
                 } catch (err) {
+                    if (err.message.includes("413")) throw err;
                     if (i === GROQ_KEYS.length * 3 - 1) throw err;
                     currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
                     await new Promise(res => setTimeout(res, 2000));
@@ -255,49 +295,17 @@
             throw new Error("Se agotaron todos los intentos");
         };
 
-
         let data;
         try {
             data = await hacerPeticion(model);
         } catch (e) {
-            console.warn("[Solver] Principal falló, usando backup...");
-            try {
-                data = await hacerPeticion(MODEL_BACKUP);
-            } catch (e2) {
-                throw new Error("Ambos modelos fallaron: " + e2.message);
-            }
+            console.warn("[Solver] Principal falló (" + e.message + "), usando backup...");
+            data = await hacerPeticion(MODEL_BACKUP);
         }
-        if (!data || !data.choices) throw new Error("Respuesta vacía de la API");
+
         const raw = data.choices[0].message.content;
+        const letra = extraerLetra(raw);
         const res = limpiarRespuestaModelo(raw);
-
-        // Extracción robusta de letra — cascada de 4 métodos
-        let letra = null;
-        const rawLines = raw.split(new RegExp("[\r\n]+"));
-        const sepIdx = rawLines.map(l => l.trim()).lastIndexOf("---");
-        if (sepIdx !== -1 && sepIdx < rawLines.length - 1) {
-            const afterSep = rawLines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
-            if (afterSep.length > 0 && new RegExp("^[A-E]$").test(afterSep[0])) {
-                letra = afterSep[0].toUpperCase();
-            }
-        }
-        if (!letra) {
-            const m = res.letraSeccion.toUpperCase().match(new RegExp("^[\\s]*([A-E])[\\s]*$"));
-            if (m) letra = m[1];
-        }
-        if (!letra) {
-            const tail = raw.slice(-300);
-            const m = tail.match(new RegExp("(?:respuesta|opci[oó]n|letra)[^A-Za-z]*([A-E])(?:[^A-Za-z]|$)", "i"));
-            if (m) letra = m[1].toUpperCase();
-        }
-        if (!letra) {
-            for (let li = rawLines.length - 1; li >= 0; li--) {
-                const l = rawLines[li].trim();
-                if (new RegExp("^[A-E]$").test(l)) { letra = l; break; }
-            }
-        }
-        if (!letra) letra = "A";
-
         return { letra, justificacion: res.justificacion };
     }
 
@@ -313,6 +321,8 @@
     }
 
     // —— Motor Principal ————————————————————————————————————————
+    await cargarKaTeX();
+
     const doc = (() => {
         try {
             const i1 = document.getElementById("ctl_2");
@@ -334,11 +344,17 @@
     }
 
     const questions = [];
+
     doc.querySelectorAll("fieldset.dfs_m").forEach(fs => {
         const opts = [];
         fs.querySelectorAll("tr.d2l-rowshadeonhover").forEach((r, i) => {
             const b = r.querySelector("d2l-html-block");
-            opts.push({ row: r, letra: "ABCDE"[i], texto: htmlToText(b?.getAttribute("html")), htmlRaw: b?.getAttribute("html") || "" });
+            opts.push({
+                row: r,
+                letra: "ABCDE"[i],
+                texto: htmlToText(b?.getAttribute("html")),
+                htmlRaw: b?.getAttribute("html") || ""
+            });
         });
         const b = buscarEnunciado(fs);
         questions.push({ tipo: "parcial", elemento: fs, opts, b });
@@ -355,13 +371,18 @@
             c.querySelectorAll("tr").forEach((r) => {
                 const radio = r.querySelector("input[type=radio]");
                 const block = r.querySelector("d2l-html-block");
-                if (radio && block) opts.push({ row: r, letra: "ABCDE"[opts.length], texto: htmlToText(block.getAttribute("html")), htmlRaw: block.getAttribute("html") || "" });
+                if (radio && block) opts.push({
+                    row: r,
+                    letra: "ABCDE"[opts.length],
+                    texto: htmlToText(block.getAttribute("html")),
+                    htmlRaw: block.getAttribute("html") || ""
+                });
             });
             questions.push({ tipo: "quiz", elemento: c, opts, b });
         });
     }
 
-    console.log("%c⚡ Cálculo II Solver — " + questions.length + " preguntas | Kimi K2 + Qwen backup", "color:cyan;font-weight:bold;font-size:13px;");
+    console.log("%c⚡ Cálculo II Solver v26 — " + questions.length + " preguntas | Qwen3 + Kimi backup", "color:cyan;font-weight:bold;font-size:13px;");
 
     for (let i = 0; i < questions.length; i++) {
         const p = questions[i];
@@ -375,12 +396,17 @@
             const img = src ? await fetchBase64(src) : null;
 
             console.log("[P" + (i + 1) + "] Enunciado:", enunciado.slice(0, 100));
-            console.log("[P" + (i + 1) + "] Opciones:", p.opts.map(o => o.letra + ": " + o.texto.slice(0, 60)));
+            console.log("[P" + (i + 1) + "] Opciones (" + p.opts.length + "):", p.opts.map(o => o.letra + ": " + o.texto.slice(0, 50)));
 
             const res = await preguntarAI(enunciado, p.opts, img);
 
-            div.innerHTML = "<div>" + prepararHTML(res.justificacion) + "</div>" +
-                "<div style='color:#16a34a;font-weight:bold;margin-top:8px;font-size:12px;'>✓ Letra: " + res.letra + "</div>";
+            // FIX 3: KaTeX real en vez de codecogs
+            div.innerHTML = "<div class='__groq_content'>" + prepararHTML(res.justificacion) + "</div>" +
+                "<div style='color:#16a34a;font-weight:bold;margin-top:10px;font-size:14px;'>✓ Respuesta: " + res.letra + "</div>";
+
+            renderKaTeX(div);
+            setTimeout(() => renderKaTeX(div), 300);
+            setTimeout(() => renderKaTeX(div), 1000);
 
             marcar(p, res.letra);
             console.log("%c✅ P" + (i + 1) + " → " + res.letra, "color:lime;font-weight:bold;");
@@ -396,5 +422,5 @@
         }
     }
 
-    console.log("%c✅ Solver completado.", "color:lime;font-weight:bold;font-size:14px;");
+    console.log("%c✅ Solver v26 completado.", "color:lime;font-weight:bold;font-size:14px;");
 })();
