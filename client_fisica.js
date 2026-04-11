@@ -69,11 +69,31 @@
     }
 
     function prepararHTML(texto) {
-        return texto
-            .split("\\(").join("$").split("\\)").join("$")
-            .split("\\[").join("$$").split("\\]").join("$$")
-            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-            .split("\n").join("<br>");
+        // Normalizar delimitadores
+        texto = texto
+            .split("\\(").join("$")
+            .split("\\)").join("$")
+            .split("\\[").join("$$")
+            .split("\\]").join("$$");
+
+        // Reemplazar saltos de línea SOLO fuera de bloques de LaTeX
+        let result = "";
+        let inBlock = false;
+        let i = 0;
+        while (i < texto.length) {
+            if (!inBlock && texto[i] === "$" && texto[i + 1] === "$") {
+                inBlock = true; result += "$$"; i += 2; continue;
+            }
+            if (inBlock && texto[i] === "$" && texto[i + 1] === "$") {
+                inBlock = false; result += "$$"; i += 2; continue;
+            }
+            if (!inBlock && texto[i] === "\n") {
+                result += "<br>"; i++; continue;
+            }
+            result += texto[i]; i++;
+        }
+
+        return result.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     }
 
     function htmlToText(html) {
@@ -394,7 +414,9 @@
 
         try {
             const enunciado = htmlToText(p.b?.getAttribute("html") || "");
-            const src = await extractImageSrc(p.b);
+            const src = await extractImageSrc(p.b)
+                || await extractImageSrc(p.b?.parentElement)
+                || await extractImageSrc(p.elemento.parentElement);
             const img = src ? await fetchBase64(src) : null;
 
             console.log("[Física P" + (i + 1) + "] Enunciado:", enunciado.slice(0, 100));
