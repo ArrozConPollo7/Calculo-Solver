@@ -3,8 +3,10 @@
     window.__solverActivo = true;
 
     // ========================================================================
-    // D2L GROQ SOLVER v26 - FÍSICA 1 (NC1001 EAFIT)
-    // Mejoras: stripThinking + rate limit inteligente + KaTeX + RESPUESTA:X
+    // D2L GROQ SOLVER v27 - FÍSICA 1 (NC1001 EAFIT)
+    // - KaTeX nativo (no codecogs)
+    // - Click en pregunta para ver justificación
+    // - Círculo de estado: verde/amarillo/rojo
     // ========================================================================
 
     const GROQ_KEYS = ["DEPLOY_REPLACE_ME"];
@@ -18,29 +20,27 @@
     const nl = String.fromCharCode(10);
     const slash = String.fromCharCode(92);
 
-    window.__groq__ = window.__groq__ || { visible: false };
-    window.__groq__.visible = window.__groq__.visible || false;
+    // —— Estado global ————————————————————————————————————————————
+    window.__groq__ = window.__groq__ || {};
+    window.__groq__.preguntas = [];
+    window.__groq__.panelActivo = null;
 
+    // Limpiar toggles viejos
     if (window.__groq_toggle_fn__) {
         window.removeEventListener("keydown", window.__groq_toggle_fn__);
-        try {
-            const i1 = document.getElementById("ctl_2");
-            const d = i1?.contentDocument || document;
-            d.removeEventListener("keydown", window.__groq_toggle_fn__);
-            const i2 = d.querySelector("iframe#FRM_page") || d.querySelector("iframe[name='pageFrame']");
-            i2?.contentWindow?.removeEventListener("keydown", window.__groq_toggle_fn__);
-        } catch (e) { }
     }
-    if (window.__groq_observer__) window.__groq_observer__.disconnect();
 
-    window.__groq_observer__ = new IntersectionObserver((entries) => {
-        entries.forEach(e => {
-            const div = e.target.__groq_div;
-            if (!div) return;
-            div.dataset.onScreen = e.isIntersecting ? "true" : "false";
-            div.style.display = (window.__groq__.visible && e.isIntersecting) ? "block" : "none";
-        });
-    }, { threshold: 0.1 });
+    // —— Círculo de estado ————————————————————————————————————————
+    // verde = ok, amarillo = advertencia (rotando key), rojo = error
+    const statusDot = document.createElement("div");
+    statusDot.style.cssText = "position:fixed;top:6px;left:6px;width:5px;height:5px;border-radius:50%;background:#00ff00;opacity:0.25;z-index:999999;pointer-events:none;transition:background 0.3s;";
+    document.body.appendChild(statusDot);
+
+    function setStatus(color) {
+        // color: 'green' | 'yellow' | 'red'
+        const colors = { green: "#00ff00", yellow: "#ffcc00", red: "#ff3333" };
+        statusDot.style.background = colors[color] || colors.green;
+    }
 
     // —— KaTeX ————————————————————————————————————————————————————
     async function cargarKaTeX() {
@@ -58,100 +58,128 @@
         await loadScript("https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js");
     }
 
-    function renderKaTeX(div) {
+    function renderKaTeX(el) {
         if (!window.renderMathInElement) return;
         try {
-            window.renderMathInElement(div, {
+            window.renderMathInElement(el, {
                 delimiters: [
                     { left: "$$", right: "$$", display: true },
                     { left: "$", right: "$", display: false },
                     { left: "\\(", right: "\\)", display: false },
                     { left: "\\[", right: "\\]", display: true }
                 ],
-                throwOnError: false, strict: false
+                throwOnError: false,
+                strict: false
             });
         } catch (e) { }
     }
 
     // —— Procesamiento de texto ————————————————————————————————————
-    // FIX 1: stripThinking — elimina bloques <think> de Qwen antes de procesar
     function stripThinking(raw) {
         return raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
     }
 
     function limpiarRespuestaModelo(raw) {
         const clean = stripThinking(raw);
-        const separatorRegex = new RegExp("---+");
-        const partes = clean.split(separatorRegex);
-        const letraSeccion = partes[partes.length - 1].trim();
-        let cuerpo = partes.length >= 2
-            ? partes.slice(0, -1).join("---").trim()
-            : clean.trim();
-        return { justificacion: cuerpo, letraSeccion };
+        // Quitar la línea "RESPUESTA: X" del cuerpo
+        const cuerpo = clean.replace(/\nRESPUESTA\s*:\s*[A-E]\s*$/i, "").trim();
+        return cuerpo;
     }
 
     function prepararHTML(texto) {
+        // Normalizar delimitadores LaTeX para KaTeX
         texto = texto
-            .split(slash + "(").join("$").split(slash + ")").join("$")
-            .split(slash + "[").join("$$").split(slash + "]").join("$$");
-        return texto.split(nl).map(l => {
-            return l.replace(new RegExp("[*][*]([^*]+)[*][*]", "g"), "<strong>$1</strong>");
-        }).join("<br>");
+            .split("\\(").join("$")
+            .split("\\)").join("$")
+            .split("\\[").join("$$")
+            .split("\\]").join("$$");
+
+        return texto
+            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+            .replace(/\*([^*\n]+)\*/g, "$1")
+            .replace(/#{1,6} ?([^\n]+)/g, "<strong>$1</strong>")
+            .split("\n").join("<br>");
     }
 
-    // —— UI ———————————————————————————————————————————————————————
-    function crearDivJustificacion(p) {
-        const el = document.createElement("div");
-        el.className = "__groq_justification_div";
-        el.style.cssText = "display:none;width:100%;max-height:160px;overflow-y:auto;background:transparent;border-top:1px solid rgba(0,0,0,0.07);font-size:11.5px;padding:8px 0;margin-bottom:12px;font-family:system-ui,sans-serif;color:#333;line-height:1.6;";
-        const target = p.elemento;
-        if (target.nextSibling) {
-            target.parentElement.insertBefore(el, target.nextSibling);
-        } else {
-            target.parentElement.appendChild(el);
+    // —— UI — Panel de justificación por pregunta ——————————————————
+    function cerrarPanelActivo() {
+        if (window.__groq__.panelActivo) {
+            window.__groq__.panelActivo.style.display = "none";
+            window.__groq__.panelActivo = null;
         }
-        p.elemento.__groq_div = el;
-        window.__groq_observer__.observe(p.elemento);
-        return el;
     }
 
-    function actualizarVisibilidad() {
-        document.querySelectorAll(".__groq_justification_div").forEach(d => {
-            const onScreen = d.dataset.onScreen === "true";
-            d.style.display = (window.__groq__.visible && onScreen) ? "block" : "none";
+    function crearPanelJustificacion(preguntaEl) {
+        const panel = document.createElement("div");
+        panel.className = "__groq_panel__";
+        panel.style.cssText = [
+            "display:none",
+            "width:100%",
+            "max-height:220px",
+            "overflow-y:auto",
+            "background:rgba(255,255,255,0.97)",
+            "border:1px solid rgba(0,0,0,0.1)",
+            "border-radius:6px",
+            "padding:12px 14px",
+            "margin:8px 0 12px 0",
+            "font-family:'Segoe UI',system-ui,sans-serif",
+            "font-size:13px",
+            "line-height:1.8",
+            "color:#1a1a1a",
+            "box-shadow:0 2px 8px rgba(0,0,0,0.08)",
+            "cursor:default"
+        ].join(";");
+
+        if (preguntaEl.nextSibling) {
+            preguntaEl.parentElement.insertBefore(panel, preguntaEl.nextSibling);
+        } else {
+            preguntaEl.parentElement.appendChild(panel);
+        }
+        return panel;
+    }
+
+    function crearTituloClickable(preguntaEl, idx, panel) {
+        // El fieldset completo actúa como botón
+        preguntaEl.style.cursor = "pointer";
+        preguntaEl.addEventListener("click", (e) => {
+            // No interferir con clicks en radio buttons
+            if (e.target.tagName === "INPUT" || e.target.tagName === "LABEL") return;
+            if (panel.style.display === "none") {
+                cerrarPanelActivo();
+                panel.style.display = "block";
+                window.__groq__.panelActivo = panel;
+                setTimeout(() => renderKaTeX(panel), 50);
+            } else {
+                panel.style.display = "none";
+                window.__groq__.panelActivo = null;
+            }
         });
+        return preguntaEl; // retorna el mismo elemento
     }
 
-    const toggleX = (e) => {
-        if (e.key.toLowerCase() !== 'x') return;
-        const now = Date.now();
-        if (window.__groq_last_t && now - window.__groq_last_t < 300) return;
-        window.__groq_last_t = now;
-        window.__groq__.visible = !window.__groq__.visible;
-        actualizarVisibilidad();
-    };
-    window.__groq_toggle_fn__ = toggleX;
-    window.addEventListener("keydown", toggleX);
-    try {
-        const i1 = document.getElementById("ctl_2");
-        const d = i1?.contentDocument || document;
-        d.addEventListener("keydown", toggleX);
-        const i2 = d.querySelector("iframe#FRM_page") || d.querySelector("iframe[name='pageFrame']");
-        i2?.contentWindow?.addEventListener("keydown", toggleX);
-    } catch (e) { }
+    function actualizarBoton(btn, estado, letra) {
+        // btn es el propio fieldset, solo actualizamos el cursor
+        if (estado === "ok") {
+            btn.title = "✓ Respuesta: " + letra + " — Click para ver justificación";
+        } else if (estado === "error") {
+            btn.title = "Error al resolver — Click para ver detalle";
+        }
+    }
 
     // —— DOM Utils ——————————————————————————————————————————————
     function htmlToText(html) {
         if (!html) return "";
         const d = document.createElement("div");
-        d.innerHTML = html.replace(new RegExp("&nbsp;", "g"), " ");
-        let t = d.textContent || d.innerText || "";
-        return t.split(new RegExp("[\\r\\n\\t]+", "g")).join(" ").split(new RegExp(" {2,}", "g")).join(" ").trim();
+        d.innerHTML = html.replace(/&nbsp;/g, " ");
+        return (d.textContent || d.innerText || "")
+            .replace(/[\r\n\t]+/g, " ")
+            .replace(/ {2,}/g, " ")
+            .trim();
     }
 
     async function extractImageSrc(el) {
         if (!el) return null;
-        for (let t = 0; t < 10; t++) {
+        for (let t = 0; t < 8; t++) {
             const rend = el.querySelector("div.d2l-html-block-rendered img");
             if (rend) return rend.getAttribute("src");
             await new Promise(r => setTimeout(r, 200));
@@ -171,7 +199,6 @@
     }
 
     // —— Prompt Cálculo II ————————————————————————————————————————
-    // FIX 4: Cambiado a "RESPUESTA: X" — más confiable que --- + letra
     const SYSTEM_CALCULO = [
         "Eres un profesor universitario experto en FÍSICA MECÁNICA (NC1001 EAFIT — Serway & Jewett 10ª ed.) con 20 años de experiencia.",
         "Tu única tarea: identificar la respuesta correcta y justificarla con rigor físico y matemático absoluto.",
@@ -202,7 +229,7 @@
         "7. VERIFICAR que coincide con una opción.",
         "",
         "REGLAS: Todo en español. JAMÁS digas Ninguna opción coincide.",
-        "PREGUNTAS NEGATIVAS: NO, FALSA, INCORRECTA → busca el ÚNICO error.",
+        "PREGUNTAS NEGATIVAS: NO, FALSA, INCORRECTA → evalúa CADA opción y busca el ÚNICO error.",
         "",
         "OBLIGATORIO: La última línea de tu respuesta debe ser EXACTAMENTE:",
         "RESPUESTA: X",
@@ -212,13 +239,13 @@
     // —— Extracción robusta de letra ——————————————————————————————
     function extraerLetra(raw) {
         const clean = stripThinking(raw);
-        const lines = clean.split(/[\r\n]+/);
 
-        // 1. Buscar "RESPUESTA: X" — método principal (FIX 4)
+        // 1. "RESPUESTA: X" — método principal
         const respTag = clean.match(/RESPUESTA\s*:\s*([A-E])/i);
         if (respTag) return respTag[1].toUpperCase();
 
         // 2. Separador --- seguido de letra sola
+        const lines = clean.split(/[\r\n]+/);
         const sepIdx = lines.map(l => l.trim()).lastIndexOf("---");
         if (sepIdx !== -1) {
             const after = lines.slice(sepIdx + 1).map(l => l.trim()).filter(l => l.length > 0);
@@ -227,13 +254,11 @@
 
         // 3. Última línea exactamente una letra
         for (let i = lines.length - 1; i >= 0; i--) {
-            const l = lines[i].trim();
-            if (/^[A-E]$/.test(l)) return l;
+            if (/^[A-E]$/.test(lines[i].trim())) return lines[i].trim();
         }
 
-        // 4. Frase explícita en últimas 300 chars
-        const tail = clean.slice(-300);
-        const m = tail.match(/(?:respuesta|opci[oó]n|letra)[^A-Za-z]*([A-E])(?:[^A-Za-z]|$)/i);
+        // 4. Frase explícita
+        const m = clean.slice(-300).match(/(?:respuesta|opci[oó]n|letra)[^A-Za-z]*([A-E])(?:[^A-Za-z]|$)/i);
         if (m) return m[1].toUpperCase();
 
         return "A";
@@ -255,16 +280,15 @@
                 temperature: 0.1
             };
             if (imagen) {
+                p.max_tokens = 2000;
                 p.messages[1].content = [
                     { type: "text", text: "Lee el enunciado y analiza la imagen.\n\nENUNCIADO:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr },
                     { type: "image_url", image_url: { url: "data:" + imagen.mimeType + ";base64," + imagen.base64 } }
                 ];
-                p.max_tokens = 2000;
             }
             return p;
         };
 
-        // FIX 2: Rate limit inteligente — lee segundos exactos de Groq
         const hacerPeticion = async (modeloParam) => {
             for (let i = 0; i < GROQ_KEYS.length * 3; i++) {
                 const key = GROQ_KEYS[currentKeyIndex];
@@ -279,8 +303,10 @@
                         const m = txt.match(/try again in ([\d.]+)s/);
                         const w = m ? Math.ceil(parseFloat(m[1])) + 2 : 20;
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
+                        setStatus("yellow");
                         console.log("[Solver Física] Rate limit — rotando key, esperando " + w + "s...");
                         await new Promise(res => setTimeout(res, w * 1000));
+                        setStatus("green");
                         continue;
                     }
                     if (r.status === 413) throw new Error("Payload too large (413)");
@@ -292,6 +318,7 @@
                     if (err.message.includes("413")) throw err;
                     if (i === GROQ_KEYS.length * 3 - 1) throw err;
                     currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
+                    setStatus("yellow");
                     await new Promise(res => setTimeout(res, 2000));
                 }
             }
@@ -303,13 +330,14 @@
             data = await hacerPeticion(model);
         } catch (e) {
             console.warn("[Solver Física] Principal falló (" + e.message + "), usando backup...");
+            setStatus("yellow");
             data = await hacerPeticion(MODEL_BACKUP);
         }
 
         const raw = data.choices[0].message.content;
         const letra = extraerLetra(raw);
-        const res = limpiarRespuestaModelo(raw);
-        return { letra, justificacion: res.justificacion };
+        const justificacion = limpiarRespuestaModelo(raw);
+        return { letra, justificacion };
     }
 
     function marcar(p, letra) {
@@ -385,13 +413,17 @@
         });
     }
 
-    console.log("%c⚡ Física 1 Solver v26 — " + questions.length + " preguntas | Qwen3 + Kimi backup — Física", "color:#00ff88;font-weight:bold;font-size:13px;");
+    console.log("%c⚡ Física 1 Solver v27 — " + questions.length + " preguntas", "color:cyan;font-weight:bold;font-size:13px;");
+    setStatus("green");
 
     for (let i = 0; i < questions.length; i++) {
         const p = questions[i];
-        const div = crearDivJustificacion(p);
-        div.innerHTML = "<em>⏳ Resolviendo pregunta " + (i + 1) + "/" + questions.length + "...</em>";
-        if (window.__groq__.visible) div.style.display = "block";
+
+        // Crear panel de justificación
+        const panel = crearPanelJustificacion(p.elemento);
+        const btn = crearTituloClickable(p.elemento, i, panel);
+
+        panel.innerHTML = "<em style='color:#888;font-size:12px;'>⏳ Resolviendo...</em>";
 
         try {
             const enunciado = htmlToText(p.b?.getAttribute("html") || "");
@@ -399,19 +431,27 @@
             const img = src ? await fetchBase64(src) : null;
 
             console.log("[Física P" + (i + 1) + "] Enunciado:", enunciado.slice(0, 100));
-            console.log("[Física P" + (i + 1) + "] Opciones (" + p.opts.length + "):", p.opts.map(o => o.letra + ": " + o.texto.slice(0, 50)));
+            console.log("[Física P" + (i + 1) + "] Opciones:", p.opts.map(o => o.letra + ": " + o.texto.slice(0, 50)));
 
             const res = await preguntarAI(enunciado, p.opts, img);
 
-            // FIX 3: KaTeX real en vez de codecogs
-            div.innerHTML = "<div class='__groq_content'>" + prepararHTML(res.justificacion) + "</div>" +
-                "<div style='color:#16a34a;font-weight:bold;margin-top:10px;font-size:14px;'>✓ Respuesta: " + res.letra + "</div>";
+            // Renderizar justificación con KaTeX
+            panel.innerHTML = [
+                "<div style='font-size:13px;line-height:1.9;color:#1a1a1a;'>",
+                prepararHTML(res.justificacion),
+                "</div>",
+                "<div style='margin-top:12px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.08);font-size:15px;font-weight:700;color:#16a34a;letter-spacing:2px;'>",
+                "✓ RESPUESTA: " + res.letra,
+                "</div>"
+            ].join("");
 
-            renderKaTeX(div);
-            setTimeout(() => renderKaTeX(div), 300);
-            setTimeout(() => renderKaTeX(div), 1000);
+            renderKaTeX(panel);
+            setTimeout(() => renderKaTeX(panel), 200);
+            setTimeout(() => renderKaTeX(panel), 800);
 
+            actualizarBoton(btn, "ok", res.letra);
             marcar(p, res.letra);
+            setStatus("green");
             console.log("%c✅ P" + (i + 1) + " → " + res.letra, "color:lime;font-weight:bold;");
 
             if (i < questions.length - 1) {
@@ -420,10 +460,12 @@
                 await new Promise(r => setTimeout(r, delay));
             }
         } catch (e) {
-            div.innerHTML = "<span style='color:#dc2626'>❌ Error: " + e.message + "</span>";
+            panel.innerHTML = "<span style='color:#dc2626;font-size:12px;'>❌ Error: " + e.message + "</span>";
+            actualizarBoton(btn, "error", "");
+            setStatus("red");
             console.error("Error en P" + (i + 1), e);
         }
     }
 
-    console.log("%c✅ Solver v26 completado.", "color:lime;font-weight:bold;font-size:14px;");
+    console.log("%c✅ Solver v27 completado.", "color:lime;font-weight:bold;font-size:14px;");
 })();
