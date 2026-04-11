@@ -139,24 +139,31 @@
     }
 
     function crearTituloClickable(preguntaEl, idx, panel) {
-        // El legend es el título "Pregunta 1" que aparece arriba
         const legend = preguntaEl.querySelector("legend");
         const target = legend || preguntaEl;
         target.style.cursor = "pointer";
         target.style.userSelect = "none";
-        target.addEventListener("click", (e) => {
+
+        // Clonar para eliminar listeners viejos
+        const newTarget = target.cloneNode(true);
+        target.parentNode.replaceChild(newTarget, target);
+
+        newTarget.addEventListener("click", (e) => {
             if (e.target.tagName === "INPUT" || e.target.tagName === "LABEL") return;
-            if (panel.style.display === "none") {
-                cerrarPanelActivo();
+            const isOpen = panel.style.display !== "none";
+            // Cerrar todos los paneles
+            const doc = preguntaEl.ownerDocument;
+            doc.querySelectorAll(".__groq_panel__").forEach(p => p.style.display = "none");
+            window.__groq__.panelActivo = null;
+            // Si estaba cerrado, abrir este
+            if (!isOpen) {
                 panel.style.display = "block";
                 window.__groq__.panelActivo = panel;
                 setTimeout(() => renderKaTeX(panel), 50);
-            } else {
-                panel.style.display = "none";
-                window.__groq__.panelActivo = null;
             }
         });
-        return target;
+
+        return newTarget;
     }
 
     function actualizarBoton(btn, estado, letra) {
@@ -449,7 +456,7 @@
             setTimeout(() => renderKaTeX(panel), 200);
             setTimeout(() => renderKaTeX(panel), 800);
 
-            actualizarBoton(btn, "ok", res.letra);
+            actualizarBoton(p.elemento.querySelector("legend") || btn, "ok", res.letra);
             marcar(p, res.letra);
             setStatus("green");
             console.log("%c✅ P" + (i + 1) + " → " + res.letra, "color:lime;font-weight:bold;");
@@ -461,7 +468,7 @@
             }
         } catch (e) {
             panel.innerHTML = "<span style='color:#dc2626;font-size:12px;'>❌ Error: " + e.message + "</span>";
-            actualizarBoton(btn, "error", "");
+            actualizarBoton(p.elemento.querySelector("legend") || btn, "error", "");
             setStatus("red");
             console.error("Error en P" + (i + 1), e);
         }
