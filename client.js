@@ -194,13 +194,13 @@
     function crearUI(container, id) {
         const wrapper = document.createElement("div");
         wrapper.id = "sol-wrapper-" + id;
-        wrapper.style = "margin:5px 0; padding:5px; background:transparent; border:none; color:#a0a0a0; font-family:monospace; font-size:10px; opacity:0.7; display:" + (window.__solverUIOpen ? "block" : "none") + ";";
+        wrapper.style = "margin:5px 0; padding:8px; background:rgba(0,0,0,0.05); border-radius:4px; color:#cccccc; font-family:monospace; font-size:11px; opacity:0.9; display:" + (window.__solverUIOpen ? "block" : "none") + ";";
         wrapper.innerHTML = `
-            <div style="display:flex;justify-content:space-between;font-size:9px;margin-bottom:2px;">
-                <span id="modo-${id}" style="opacity:0.5;">...</span>
-                <span id="letra-${id}" style="font-weight:bold; font-size:24px; color:#00ff88; opacity:1; text-shadow: 1px 1px 2px #000;">?</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span id="modo-${id}" style="opacity:0.4; font-size:8px;">...</span>
+                <span id="letra-${id}" style="font-weight:bold; font-size:24px; color:#00ff88; text-shadow: 1px 1px 2px #000;">?</span>
             </div>
-            <div id="proc-${id}" style="max-height:100px;overflow-y:auto;line-height:1.2;">...</div>
+            <div id="proc-${id}" style="max-height:120px;overflow-y:auto;line-height:1.4; border-top:1px solid rgba(255,255,255,0.05); padding-top:4px;">...</div>
         `;
         container.appendChild(wrapper);
     }
