@@ -198,30 +198,21 @@ FORMATO OBLIGATORIO:
                 const sr = el.shadowRoot;
                 if (!sr) return el.innerText.trim().slice(0, 500);
 
-                let resultado = "";
-                const walker = sr.ownerDocument.createTreeWalker(
-                    sr,
-                    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
-                    {
-                        acceptNode(node) {
-                            if (node.nodeType === Node.ELEMENT_NODE) {
-                                const tag = node.tagName.toLowerCase();
-                                if (tag === "style" || tag === "script") return NodeFilter.FILTER_REJECT;
-                                if (tag === "mjx-assistive-mml") return NodeFilter.FILTER_ACCEPT;
-                                if (tag.startsWith("mjx-")) return NodeFilter.FILTER_REJECT;
-                                return NodeFilter.FILTER_SKIP;
-                            }
-                            return NodeFilter.FILTER_ACCEPT;
-                        }
-                    }
-                );
+                // El contenido está en el primer DIV del shadowRoot
+                const div = sr.querySelector("div");
+                if (!div) return sr.textContent.replace(/\s{2,}/g, " ").trim().slice(0, 500);
 
-                let node;
-                while (node = walker.nextNode()) {
-                    const t = node.textContent.trim();
-                    if (t) resultado += t + " ";
-                }
-                return resultado.replace(/\s{2,}/g, " ").trim().slice(0, 500);
+                // Reemplazar cada mjx-container por su mjx-assistive-mml
+                const clone = div.cloneNode(true);
+                clone.querySelectorAll("mjx-container").forEach(mjx => {
+                    const mml = mjx.querySelector("mjx-assistive-mml");
+                    const txt = document.createTextNode(mml ? " " + mml.textContent + " " : "");
+                    mjx.replaceWith(txt);
+                });
+                // Eliminar estilos residuales
+                clone.querySelectorAll("style").forEach(s => s.remove());
+
+                return clone.textContent.replace(/\s{2,}/g, " ").trim().slice(0, 500);
             }
 
             const todosLosBlockes = q.ownerDocument.querySelectorAll("d2l-html-block");
@@ -241,7 +232,7 @@ FORMATO OBLIGATORIO:
             if (!imgEl && blocksAntes.length > 0) {
                 const lastBlock = blocksAntes[blocksAntes.length - 1];
                 imgEl = lastBlock.shadowRoot?.querySelector("img")
-                     || lastBlock.querySelector("img");
+                    || lastBlock.querySelector("img");
             }
             if (imgEl) {
                 const r = await fetch(imgEl.src, { credentials: "include" });
