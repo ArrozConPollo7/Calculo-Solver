@@ -34,7 +34,7 @@
     // verde = ok, amarillo = advertencia (rotando key), rojo = error
     const statusDot = document.createElement("div");
     statusDot.style.cssText = "position:fixed;top:6px;left:6px;width:5px;height:5px;border-radius:50%;background:#00ff00;opacity:0.25;z-index:999999;pointer-events:none;transition:background 0.3s;";
-    document.body.appendChild(statusDot);
+    window.top.document.body.appendChild(statusDot); // ← window.top para salir del iframe
 
     function setStatus(color) {
         // color: 'green' | 'yellow' | 'red'
@@ -139,10 +139,12 @@
     }
 
     function crearTituloClickable(preguntaEl, idx, panel) {
-        // El fieldset completo actúa como botón
-        preguntaEl.style.cursor = "pointer";
-        preguntaEl.addEventListener("click", (e) => {
-            // No interferir con clicks en radio buttons
+        // El legend es el título "Pregunta 1" que aparece arriba
+        const legend = preguntaEl.querySelector("legend");
+        const target = legend || preguntaEl;
+        target.style.cursor = "pointer";
+        target.style.userSelect = "none";
+        target.addEventListener("click", (e) => {
             if (e.target.tagName === "INPUT" || e.target.tagName === "LABEL") return;
             if (panel.style.display === "none") {
                 cerrarPanelActivo();
@@ -154,15 +156,16 @@
                 window.__groq__.panelActivo = null;
             }
         });
-        return preguntaEl; // retorna el mismo elemento
+        return target;
     }
 
     function actualizarBoton(btn, estado, letra) {
-        // btn es el propio fieldset, solo actualizamos el cursor
         if (estado === "ok") {
-            btn.title = "✓ Respuesta: " + letra + " — Click para ver justificación";
+            btn.title = "✓ " + letra + " — Click para justificación";
+            btn.style.color = "#16a34a";
         } else if (estado === "error") {
-            btn.title = "Error al resolver — Click para ver detalle";
+            btn.title = "Error — Click para detalle";
+            btn.style.color = "#dc2626";
         }
     }
 
