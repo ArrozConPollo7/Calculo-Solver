@@ -198,12 +198,16 @@ FORMATO OBLIGATORIO:
                 const sr = el.shadowRoot;
                 const texto = sr ? sr.textContent : el.innerText;
                 return texto
-                    .replace(/mjx-container[\s\S]*?}/g, "")
-                    .replace(/\[jax[\s\S]*?}/g, "")
-                    .replace(/line-height[\s\S]*?;/g, "")
+                    .replace(/mjx-[a-z-]+\s*\{[^}]*\}/g, "")      // clases mjx-xxx { ... }
+                    .replace(/_::[^\{]+\{[^}]*\}/g, "")             // _::-webkit-... { ... }
+                    .replace(/:root[^\{]+\{[^}]*\}/g, "")           // :root ... { ... }
+                    .replace(/\{[^}]*display[^}]*\}/g, "")          // cualquier { display: ... }
+                    .replace(/position:\s*absolute[^;]*;/g, "")     // position: absolute
+                    .replace(/clip:\s*rect[^;]*;/g, "")             // clip: rect(...)
+                    .replace(/padding:\s*[\dpx\s]+;/g, "")          // padding: ...
                     .replace(/\s{2,}/g, " ")
                     .trim()
-                    .slice(0, 600);
+                    .slice(0, 500);
             }
 
             const todosLosBlockes = q.ownerDocument.querySelectorAll("d2l-html-block");
