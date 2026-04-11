@@ -98,26 +98,30 @@
 
     // —— UI — panel de justificación ——————————————————————————————
     function setupPanelClick(fieldset, panel, quizDoc) {
-        const legend = fieldset.querySelector("legend");
-        if (!legend) return;
-
-        legend.style.cursor = "pointer";
-        legend.style.userSelect = "none";
-
-        // Usar el quizDoc para el evento — así el listener vive en el iframe correcto
-        legend.addEventListener("click", function (e) {
-            e.stopPropagation();
-            // Cerrar otros paneles abiertos
-            quizDoc.querySelectorAll(".__groq_panel__").forEach(p => {
-                if (p !== panel) p.style.display = "none";
-            });
-            // Toggle este panel
-            const open = panel.style.display === "block";
-            panel.style.display = open ? "none" : "block";
-            if (!open) {
-                setTimeout(() => renderKaTeX(panel, quizDoc), 80);
+        // Subir desde el fieldset hasta encontrar el ancestro común con el H2
+        let anc = fieldset.parentElement;
+        for (let n = 0; n < 5; n++) {
+            if (!anc) break;
+            const h2 = anc.querySelector("h2.dhdg_2, h2[class*='dhdg'], h3[class*='dhdg']");
+            if (h2) {
+                h2.style.cursor = "pointer";
+                h2.style.userSelect = "none";
+                h2.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    const isOpen = panel.style.display === "block";
+                    // Cerrar todos los paneles
+                    quizDoc.querySelectorAll(".__groq_panel__")
+                        .forEach(p => p.style.display = "none");
+                    // Abrir este si estaba cerrado
+                    if (!isOpen) {
+                        panel.style.display = "block";
+                        setTimeout(() => renderKaTeX(panel, quizDoc), 80);
+                    }
+                });
+                return h2;
             }
-        });
+            anc = anc.parentElement;
+        }
     }
 
     function crearPanel(fieldset, quizDoc) {
@@ -157,14 +161,21 @@
     }
 
     function actualizarLegend(fieldset, estado, letra) {
-        const legend = fieldset.querySelector("legend");
-        if (!legend) return;
-        if (estado === "ok") {
-            legend.style.color = "#16a34a";
-            legend.title = "✓ Respuesta: " + letra + " — Haz click para ver justificación";
-        } else {
-            legend.style.color = "#dc2626";
-            legend.title = "Error al resolver — Click para ver detalle";
+        let anc = fieldset.parentElement;
+        for (let n = 0; n < 5; n++) {
+            if (!anc) break;
+            const h2 = anc.querySelector("h2.dhdg_2, h2[class*='dhdg']");
+            if (h2) {
+                if (estado === "ok") {
+                    h2.style.color = "#16a34a";
+                    h2.title = "✓ " + letra + " — Click para ver justificación";
+                } else {
+                    h2.style.color = "#dc2626";
+                    h2.title = "Error — Click para ver detalle";
+                }
+                return;
+            }
+            anc = anc.parentElement;
         }
     }
 
