@@ -37,8 +37,12 @@
     const MODEL_PRO = "qwen/qwen3-32b";
     const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
 
-    // TEMAS PRO PARA CÁLCULO
-    const KEYWORDS_PRO_CALCULO = ["impropia", "infinit", "converg", "diverg", "serie"];
+    // TEMAS PRO: solo preguntas conceptuales/trampa (Qwen es mejor que PRO en cálculo numérico)
+    const KEYWORDS_PRO_CALCULO = [
+        "no corresponde", "falsa", "incorrecta",
+        "afirmación", "cuál de las siguientes es correcta",
+        "converg", "diverg", "serie"
+    ];
 
     // EL PROMPT MAESTRO DE CÁLCULO
     const SYSTEM_CALCULO = [
@@ -191,9 +195,11 @@
                 const texto = sr ? sr.textContent : el.innerText;
                 return texto
                     .replace(/mjx-container[\s\S]*?}/g, "")
+                    .replace(/\[jax[\s\S]*?}/g, "")
+                    .replace(/line-height[\s\S]*?;/g, "")
                     .replace(/\s{2,}/g, " ")
                     .trim()
-                    .slice(0, 800);
+                    .slice(0, 600);
             }
 
             const todosLosBlockes = q.ownerDocument.querySelectorAll("d2l-html-block");
@@ -208,7 +214,13 @@
             })).filter(o => o.texto.length > 0);
 
             let imgData = null;
-            const imgEl = q.querySelector("img");
+            // Bug 2: imagen puede estar en shadowRoot del bloque enunciado
+            let imgEl = q.querySelector("img");
+            if (!imgEl && blocksAntes.length > 0) {
+                const lastBlock = blocksAntes[blocksAntes.length - 1];
+                imgEl = lastBlock.shadowRoot?.querySelector("img")
+                     || lastBlock.querySelector("img");
+            }
             if (imgEl) {
                 const r = await fetch(imgEl.src, { credentials: "include" });
                 const b = await r.blob();
@@ -236,14 +248,6 @@
         } catch (e) { marcarError(q); console.error("[Solver] Error:", e.message); }
     }
 
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting && !entry.target.dataset.solved) {
-                entry.target.dataset.solved = "true";
-                resolverPregunta(entry.target, Math.random().toString(36).substr(2, 5));
-            }
-        });
-    });
 
     function getQuizDoc() {
         try {
