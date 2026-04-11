@@ -3,15 +3,28 @@
     window.__solverActivo = true;
 
     // ========================================================================
-    // D2L GROQ SOLVER v28 - FÍSICA 1 (NC1001 EAFIT)
+    // D2L GROQ SOLVER v29 - FÍSICA 1 (NC1001 EAFIT)
     // ========================================================================
 
     const GROQ_KEYS = ["DEPLOY_REPLACE_ME"];
     let currentKeyIndex = 0;
     const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
     const MODEL_TEXTO = "qwen/qwen3-32b";
+    const MODEL_PRO = "gpt-oss-120b";
     const MODEL_VISION = "meta-llama/llama-4-scout-17b-16e-instruct";
     const MODEL_BACKUP = "moonshotai/kimi-k2-instruct-0905";
+
+    // Keywords que activan el modelo PRO (preguntas de justificación / 30%)
+    const KEYWORDS_PRO = [
+        "justificación requerida", "(30%)", "30 puntos", "justifique",
+        "coeficiente de fricción cinético", "fuerza de contacto",
+        "trabajo y energía", "cuerda inextensible",
+        "polea ideal", "tensión en la cuerda",
+        "coeficiente de fricción estático", "parte del reposo",
+        "fuerza de fricción promedio", "masa en suspensión", "fuerza mínima",
+        "superficie horizontal", "equilibrio", "cuarto de círculo",
+        "colisión", "energía cinética", "energía potencial"
+    ];
     const nl = String.fromCharCode(10);
     const slash = String.fromCharCode(92);
 
@@ -295,7 +308,19 @@
     // —— Prompt ———————————————————————————————————————————————————
     const SYSTEM_CALCULO = [
         "Eres un profesor universitario experto en FÍSICA MECÁNICA (NC1001 EAFIT — Serway & Jewett 10ª ed.) con 20 años de experiencia.",
-        "Tu única tarea: identificar la respuesta correcta con rigor físico y numérico absoluto.",
+        "Tu única tarea: resolver la pregunta dada y justificarla con rigor físico y matemático absoluto.",
+        "",
+        "⛔ REGLA CRÍTICA #1: LEE LA PREGUNTA QUE TE DAN.",
+        "NO inventes un problema diferente. NO asumas datos que no están en el enunciado.",
+        "Resuelve EXACTAMENTE la situación descrita en la pregunta, con los datos dados.",
+        "Si el problema habla de dos bloques en contacto, resuélvelo así. NO lo conviertas en una polea Atwood.",
+        "",
+        "⛔ REGLA CRÍTICA #2: RESPONDE TODO EN ESPAÑOL.",
+        "Cero inglés. Ni una sola frase en inglés. Si piensas en inglés, traduce SIEMPRE.",
+        "",
+        "⛔ REGLA CRÍTICA #3: SÉ CONCISO Y DIRECTO.",
+        "NO divagues. NO repitas el razonamiento múltiples veces. Calcula UNA vez correctamente.",
+        "Si tu resultado coincide con una opción, elige esa opción y termina.",
         "",
         "TEMAS CLAVE (g = 9.8 m/s² siempre):",
         "- ΣF = ma por eje. Fricción: f_s ≤ μ_s·N, f_k = μ_k·N.",
@@ -308,30 +333,34 @@
         "- Sin fricción: K_i + U_i = K_f + U_f.",
         "- Inelástica: momento conservado, KE no. Elástica: ambos conservados.",
         "- KE = ½mv². Resorte: U = ½kx².",
-        "- Sistemas multi-bloque con F horizontal: a = F_ext/(m1+m2). Fuerza de contacto sobre m2 = m2·a.",
+        "- Sistemas multi-bloque con F horizontal: a = F_ext_neta/(m1+m2). Fuerza de contacto sobre m2 = m2·a + f_k2 (incluir fricción del bloque 2).",
+        "- Dos bloques en contacto empujados: fricción total = μ_k·(m1+m2)·g. a = (F - f_total)/(m1+m2).",
         "",
         "⚠️  PROBLEMAS DE CÁLCULO NUMÉRICO MULTI-PASO — PROTOCOLO OBLIGATORIO:",
         "Estos problemas (los más difíciles, 30 pts) combinan 2-3 principios. Las opciones son cercanas.",
         "Un error aritmético cambia la respuesta. Sigue este protocolo sin saltarte ningún paso:",
         "",
-        "PASO 1 — TRAMOS: identifica y lista cada tramo o subsistema (ej: A→B curvo, B→C horizontal).",
-        "PASO 2 — DATOS: extrae TODOS los valores numéricos con unidades. No omitas ninguno.",
+        "PASO 1 — TRAMOS: identifica y lista cada tramo o subsistema del problema DADO (no de otro problema).",
+        "PASO 2 — DATOS: extrae TODOS los valores numéricos con unidades DEL ENUNCIADO. No omitas ninguno.",
         "PASO 3 — ECUACIONES POR TRAMO: plantea la ecuación de cada tramo por separado.",
         "  · Tramo curvo h=R (cuarto de círculo): mgh = ½mv²_B + W_f_curva.",
         "  · Tramo recto hasta el reposo: ½mv²_B = μ_k·m·g·d.",
-        "  · Polea compuesta: cuenta segmentos n que soportan la masa → T = Mg/n, T4 = n·T.",
-        "  · Multi-bloque: aplica Newton al sistema completo, luego al subsistema para fuerza interna.",
+        "  · Polea compuesta: cuenta segmentos n que soportan la masa → T = Mg/n.",
+        "  · Multi-bloque con contacto: Newton al sistema completo → a. Luego Newton a un bloque para fuerza interna.",
+        "  · Trabajo-energía con fricción: m₂gh = μ_k·m₁·g·(h + d_extra) cuando se elimina v².",
         "PASO 4 — DESPEJAR: aísla la incógnita algebraicamente antes de sustituir.",
         "PASO 5 — CALCULAR: sustituye todos los valores y opera paso a paso. Muestra cada número.",
         "PASO 6 — COMPARAR: escribe el valor numérico obtenido y compáralo contra cada opción.",
         "PASO 7 — VERIFICAR sentido físico (μk entre 0 y 1, tensiones > 0, velocidades positivas).",
         "",
         "ERRORES COMUNES A EVITAR:",
+        "- INVENTAR un problema diferente al que te preguntan.",
         "- Olvidar la fricción en uno de los tramos.",
         "- Usar h ≠ R en trayectorias de cuarto de círculo.",
         "- Confundir μ_s con μ_k.",
         "- Contar mal los segmentos de cuerda en sistemas de poleas.",
         "- No separar la fuerza de contacto del sistema completo.",
+        "- En trabajo-energía con caída y fricción: al eliminar v² por combinación de ecuaciones, la KE a veces solo involucra m₁ (no m₁+m₂) después del impacto.",
         "",
         "REGLAS: Todo en español. LaTeX: $...$ inline, $$...$$ display.",
         "PREGUNTAS CONCEPTUALES NEGATIVAS: evalúa CADA opción y busca el ÚNICO error.",
@@ -360,23 +389,34 @@
     }
 
     // —— API ——————————————————————————————————————————————————————
+    function detectarModeloPRO(enunciado) {
+        const lower = (enunciado || "").toLowerCase();
+        return KEYWORDS_PRO.some(k => lower.includes(k));
+    }
+
     async function preguntarAI(enunciado, opciones, imagen) {
         const optsStr = opciones.map(o => o.letra + ") " + (o.htmlRaw || o.texto)).join(nl);
-        const model = imagen ? MODEL_VISION : MODEL_TEXTO;
+        const esPRO = detectarModeloPRO(enunciado);
+        const model = imagen ? MODEL_VISION : (esPRO ? MODEL_PRO : MODEL_TEXTO);
+        console.log("[Solver Física] Modelo seleccionado:", model, esPRO ? "(PRO)" : "(estándar)");
 
         const construirPayload = (m) => {
+            const isQwen = m.includes("qwen");
+            const userContent = (isQwen ? "/no_think\n\n" : "") +
+                "Lee cuidadosamente la siguiente pregunta. Resuelve EXACTAMENTE este problema, no otro.\n\n" +
+                "PREGUNTA:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr;
             const p = {
                 model: m,
                 messages: [
                     { role: "system", content: SYSTEM_CALCULO },
-                    { role: "user", content: "PREGUNTA:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr }
+                    { role: "user", content: userContent }
                 ],
-                max_tokens: 3000, temperature: 0.1
+                max_tokens: esPRO ? 4000 : 3000, temperature: 0.1
             };
             if (imagen) {
-                p.max_tokens = 2000;
+                p.max_tokens = 3000;
                 p.messages[1].content = [
-                    { type: "text", text: "Analiza la imagen.\nENUNCIADO:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr },
+                    { type: "text", text: "Analiza la imagen y el enunciado. Resuelve EXACTAMENTE este problema.\nENUNCIADO:\n" + enunciado + nl + nl + "OPCIONES:\n" + optsStr },
                     { type: "image_url", image_url: { url: "data:" + imagen.mimeType + ";base64," + imagen.base64 } }
                 ];
             }
@@ -489,7 +529,7 @@
         });
     }
 
-    console.log("%c⚡ Física 1 Solver v28 — " + questions.length + " preguntas", "color:#00ff88;font-weight:bold;font-size:13px;");
+    console.log("%c⚡ Física 1 Solver v29 — " + questions.length + " preguntas", "color:#00ff88;font-weight:bold;font-size:13px;");
 
     for (let i = 0; i < questions.length; i++) {
         const p = questions[i];
@@ -546,5 +586,5 @@
         }
     }
 
-    console.log("%c✅ Solver v28 completado.", "color:lime;font-weight:bold;font-size:14px;");
+    console.log("%c✅ Solver v29 completado.", "color:lime;font-weight:bold;font-size:14px;");
 })();
