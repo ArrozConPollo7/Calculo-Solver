@@ -234,45 +234,40 @@
                     });
                     if (r.status === 429) {
                         currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
-                        const wait = 5; // Solo 5s al rotar key, el tiempo largo es para cuando se agotan todas
-                        console.log("[Solver] Rate limit — rotando key, esperando " + wait + "s...");
-                        await new Promise(res => setTimeout(res, wait * 1000));
+                        console.log("[Solver] Rate limit — rotando key, esperando 5s...");
+                        await new Promise(res => setTimeout(res, 5000));
                         continue;
                     }
                     if (r.status === 413) {
-                        // Payload muy grande — reducir max_tokens y reintentar
-                        console.warn("[Solver] 413 Payload too large — reduciendo tokens...");
-                        construirPayload = (modeloParam) => {
-                            const p = {
-                                model: modeloParam,
-                                messages: [
-                                    { role: "system", content: SYSTEM_CALCULO },
-                                    { role: "user", content: "Resuelve:\n" + enunciado.slice(0, 500) + nl + nl + "OPCIONES:\n" + optsStr }
-                                ],
-                                max_tokens: 2000,
-                                temperature: 0.1
-                            };
-                            return p;
-                        };
-                        continue;
+                        console.warn("[Solver] 413 payload muy grande — abortando");
+                        throw new Error("Payload too large (413)");
                     }
-                    if (!r.ok) throw new Error("Groq API Error: " + r.status);
+                    if (!r.ok) throw new Error("API Error " + r.status);
+                    const data = await r.json();
+                    if (!data?.choices?.[0]?.message?.content) throw new Error("Respuesta vacía");
+                    return data; // ← único return exitoso
                 } catch (err) {
                     if (i === GROQ_KEYS.length * 3 - 1) throw err;
                     currentKeyIndex = (currentKeyIndex + 1) % GROQ_KEYS.length;
                     await new Promise(res => setTimeout(res, 2000));
                 }
             }
+            throw new Error("Se agotaron todos los intentos");
         };
+
 
         let data;
         try {
             data = await hacerPeticion(model);
         } catch (e) {
-            console.warn("[Solver] Kimi falló, usando Qwen como fallback...");
-            data = await hacerPeticion(MODEL_BACKUP);
+            console.warn("[Solver] Principal falló, usando backup...");
+            try {
+                data = await hacerPeticion(MODEL_BACKUP);
+            } catch (e2) {
+                throw new Error("Ambos modelos fallaron: " + e2.message);
+            }
         }
-
+        if (!data || !data.choices) throw new Error("Respuesta vacía de la API");
         const raw = data.choices[0].message.content;
         const res = limpiarRespuestaModelo(raw);
 
